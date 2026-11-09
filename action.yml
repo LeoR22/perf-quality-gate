@@ -1,0 +1,90 @@
+name: "Performance Quality Gate"
+description: "Compara una prueba de carga contra producción y bloquea el pipeline si la versión nueva es más lenta."
+branding:
+  icon: "activity"
+  color: "red"
+
+inputs:
+  baseline:
+    description: "Resultados de producción (línea base). Ej: resultados/produccion-actual.csv"
+    required: true
+  candidate:
+    description: "Resultados de la versión nueva"
+    required: true
+  config:
+    description: "Archivo YAML/JSON con los límites del equipo (opcional)"
+    required: false
+    default: ""
+  name:
+    description: "Nombre de la versión en el reporte (por defecto, el nombre del archivo)"
+    required: false
+    default: ""
+  format:
+    description: "Formato de resultados: auto | jmeter-csv | k6"
+    required: false
+    default: "auto"
+  fail-on-warnings:
+    description: "Si es 'true', las advertencias también dejan el pipeline en rojo"
+    required: false
+    default: "false"
+  report-dir:
+    description: "Carpeta donde se escriben report.md y report.json"
+    required: false
+    default: "perf-gate-report"
+  upload-report:
+    description: "Subir el reporte como artifact del pipeline"
+    required: false
+    default: "true"
+
+outputs:
+  result:
+    description: "PASS | WARN | FAIL"
+    value: ${{ steps.gate.outputs.result }}
+  passed:
+    description: "'true' si la versión puede pasar a producción"
+    value: ${{ steps.gate.outputs.passed }}
+  headline:
+    description: "Resumen en una línea del veredicto"
+    value: ${{ steps.gate.outputs.headline }}
+  report-json:
+    description: "Ruta del reporte JSON"
+    value: ${{ steps.gate.outputs.report-json }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Instalar dependencias
+      shell: bash
+      run: python -m pip install --quiet -r "${{ github.action_path }}/requirements.txt"
+
+    - name: Evaluar performance
+      id: gate
+      shell: bash
+      env:
+        PYTHONPATH: ${{ github.action_path }}/src
+        PYTHONIOENCODING: utf-8
+        IN_BASELINE: ${{ inputs.baseline }}
+        IN_CANDIDATE: ${{ inputs.candidate }}
+        IN_CONFIG: ${{ inputs.config }}
+        IN_NAME: ${{ inputs.name }}
+        IN_FORMAT: ${{ inputs.format }}
+        IN_REPORT_DIR: ${{ inputs.report-dir }}
+        IN_FAIL_ON_WARNINGS: ${{ inputs.fail-on-warnings }}
+      run: |
+        args=(--baseline "$IN_BASELINE" --candidate "$IN_CANDIDATE" --format "$IN_FORMAT" --report-dir "$IN_REPORT_DIR")
+        [ -n "$IN_CONFIG" ] && args+=(--config "$IN_CONFIG")
+        [ -n "$IN_NAME" ] && args+=(--name "$IN_NAME")
+        [ "$IN_FAIL_ON_WARNINGS" = "true" ] && args+=(--fail-on-warnings)
+        python -m perf_gate "${args[@]}"
+
+    - name: Publicar reporte
+      if: always() && inputs.upload-report == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: perf-gate-report-${{ inputs.name != '' && inputs.name || github.job }}
+        path: ${{ inputs.report-dir }}
+        if-no-files-found: ignore
