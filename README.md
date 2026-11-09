@@ -133,6 +133,7 @@ defaults:                           # aplica a todos los endpoints
   min_increase_ms: 15
   max_error_rate_pct: 1.0
   max_error_rate_increase_pp: 0.5
+  error_confidence_pct: 99         # el aumento de errores debe ser estadísticamente significativo
   min_samples: 30
 
 endpoints:                          # nombre exacto o patrón glob ("POST /*")
@@ -144,7 +145,7 @@ endpoints:                          # nombre exacto o patrón glob ("POST /*")
 ```
 
 Por endpoint se puede sobrescribir: `percentile`, `max_increase_pct`, `min_increase_ms`, `max_ms`,
-`max_error_rate_pct`, `max_error_rate_increase_pp`, `min_samples` e `ignore`. Primero se busca el nombre
+`max_error_rate_pct`, `max_error_rate_increase_pp`, `error_confidence_pct`, `min_samples` e `ignore`. Primero se busca el nombre
 exacto y luego el primer patrón glob que coincida. Las claves mal escritas se rechazan con un error claro,
 para que un error de tipeo no desactive un límite sin que nadie se dé cuenta.
 
@@ -156,6 +157,7 @@ para que un error de tipeo no desactive un límite sin que nadie se dé cuenta.
 | Máximo empeoramiento | +20 % | Margen para la variación normal entre corridas sin dejar pasar regresiones reales |
 | Diferencia mínima | 15 ms | En endpoints muy rápidos, +30 % pueden ser 3 ms: eso es ruido, no regresión |
 | Tasa de error | ≤ 1 % y ≤ +0,5 pp | Ser rápido no sirve si se falla más |
+| Significancia del aumento de errores | 99 % | Prueba z de dos proporciones: 3 errores sueltos en 400 peticiones no bloquean; un salto real (0,25 % → 3,3 % en 1.170 peticiones) sí. Se descubrió corriendo la demo real con k6 |
 | Muestras mínimas | 30 | Con menos, un percentil no es estadísticamente confiable |
 | Calentamiento | 60 s | En las tres pruebas, los primeros 10 s son entre 2 y 3,6 veces más lentos; B tarda 50 s en estabilizarse |
 | Throughput | −15 % | Con los mismos usuarios, atender menos peticiones indica un cuello de botella |

@@ -15,7 +15,8 @@ defaults:                           # aplica a todos los endpoints
   max_increase_pct: 20              # máximo +20 % vs producción
   min_increase_ms: 15               # diferencias menores a 15 ms se consideran ruido
   max_error_rate_pct: 1.0           # tasa de error máxima absoluta
-  max_error_rate_increase_pp: 0.5   # máximo +0.5 puntos porcentuales vs producción
+  max_error_rate_increase_pp: 0.5   # máximo +0.5 puntos porcentuales vs producción...
+  error_confidence_pct: 99          # ...si el aumento es estadísticamente significativo (0 = sin prueba)
   min_samples: 30                   # con menos muestras no se juzga el endpoint
 
 endpoints:                          # límites distintos por endpoint (nombre exacto o patrón glob)
