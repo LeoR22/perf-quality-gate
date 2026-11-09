@@ -84,7 +84,7 @@ jobs:
 | `candidate` | sí | | Resultados de la versión nueva |
 | `config` | no | (límites por defecto) | YAML/JSON con los límites del equipo |
 | `name` | no | nombre del archivo | Nombre en el reporte |
-| `format` | no | `auto` | `jmeter-csv` (k6: pendiente) |
+| `format` | no | `auto` | `auto` (por contenido), `jmeter-csv` o `k6` (JSON o CSV) |
 | `fail-on-warnings` | no | `false` | Las advertencias también bloquean |
 | `report-dir` | no | `perf-gate-report` | Dónde quedan `report.md` y `report.json` |
 | `upload-report` | no | `true` | Sube el reporte como artifact |
@@ -184,12 +184,14 @@ Todo esto aparece en la sección **"Calidad de datos"** de cada reporte.
 src/perf_gate/
 ├── readers/          # Formato de entrada → modelo neutral (Sample)
 │   ├── jmeter_csv.py #   JMeter CSV (detecta separador, comillas, orden, filas malas)
-│   └── __init__.py   #   Registro de lectores + detección de formato (k6: pendiente)
+│   ├── k6.py         #   k6 --out json / --out csv (une duración, TTFB y fallos por petición)
+│   └── __init__.py   #   Registro de lectores + detección de formato por contenido
 ├── models.py         # Sample / LoadTestResult: no dependen de la herramienta de carga
 ├── stats.py          # Estado estable, percentiles, throughput, tiempo de estabilización
 ├── config.py         # Límites globales, por defecto y por endpoint (YAML/JSON, validados)
 ├── compare.py        # Reglas → Findings (PASS/WARN/FAIL + por qué + qué mejorar)
 ├── report.py         # Consola, Markdown (Job Summary), JSON, anotaciones de GitHub
+├── html_report.py    # Reporte visual HTML autocontenido
 └── cli.py            # Punto de entrada y exit code
 ```
 
@@ -199,16 +201,31 @@ src/perf_gate/
 - **Recomendaciones con diagnóstico:** se usa `Latency` (tiempo al primer byte) frente a `elapsed`, y
   `bytes`, para indicar si la demora está en el servidor o en transferir la respuesta.
 
-### Cómo agregar k6
+### Soporte de k6
 
-El comparador y los reportes trabajan sobre `LoadTestResult`, que no depende de la herramienta.
-Soportar k6 es escribir `readers/k6.py`, que lea la salida JSON de k6 (`k6 run --out json=...`,
-métrica `http_req_duration` con `tags.name` como label y `http_req_failed` como error), y registrarlo en
-`READERS`. No se toca nada más.
+El comparador y los reportes trabajan sobre `LoadTestResult`, que no depende de la herramienta. Agregar
+k6 fue escribir [`readers/k6.py`](src/perf_gate/readers/k6.py) y registrarlo; no se tocó nada más.
+
+```bash
+k6 run --out json=resultados.json script.js   # o --out csv=resultados.csv
+```
+
+- **Etiqueta:** el tag `name` de cada petición (`tags: { name: 'POST /pagos' }`). Usar los mismos nombres
+  que en JMeter permite comparar **producción medida con JMeter contra una versión medida con k6**.
+  Sin `name`, se arma `MÉTODO /ruta` a partir de la URL.
+- **Por petición:** `http_req_duration` (tiempo total), `http_req_waiting` (TTFB, como `Latency` de JMeter)
+  y `http_req_failed` (error), unidos por timestamp y tags.
+- **Validado con salida real de k6 2.2.0** ([fixtures](tests/fixtures)). En la prueba aparecieron dos
+  detalles: k6 2.x copia `name` en el tag `url` y el CSV trae el tiempo en segundos (se avisa en el reporte).
+- El resumen agregado (`--summary-export`) se rechaza con un error claro: no trae peticiones individuales.
+- La demo completa con Docker (APIs, k6, gate y Grafana) está en
+  [perf-gate-demo](https://github.com/LeoR22/perf-gate-demo#demo-local-con-docker-k6--grafana).
+
+También se instala como paquete: `pip install https://github.com/LeoR22/perf-quality-gate/archive/refs/tags/v1.zip`
+y queda el comando `perf-gate`.
 
 ### Alcance recortado (por tiempo)
 
-- k6 no está implementado; el diseño ya lo contempla.
 - La línea base se pasa como archivo. En un pipeline real se podría descargar automáticamente desde el
   último artifact de producción.
 
