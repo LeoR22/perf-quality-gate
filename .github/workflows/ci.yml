@@ -1,0 +1,62 @@
+# Pipeline que CONSTRUYE la herramienta: tests unitarios, prueba de la action y release.
+name: CI - Build & Test
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: python -m pytest -v
+
+  action-smoke-test:
+    name: Smoke test de la action (misma versión debe pasar)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: gate
+        uses: ./
+        with:
+          baseline: examples/resultados/produccion-actual.csv
+          candidate: examples/resultados/produccion-actual.csv
+          name: produccion-vs-produccion
+      - name: Verificar salida
+        run: |
+          echo "Resultado: ${{ steps.gate.outputs.result }}"
+          test "${{ steps.gate.outputs.passed }}" = "true"
+
+  release:
+    name: Publicar release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, action-smoke-test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Crear release y mover el tag mayor (v1)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" --generate-notes || echo "La release ya existe"
+          MAJOR="${TAG%%.*}"
+          git tag -f "$MAJOR"
+          git push -f origin "$MAJOR"

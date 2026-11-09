@@ -1,0 +1,41 @@
+# Pipeline que USA la herramienta: evalúa la versión A y la versión B contra producción.
+# Se espera: version-a en ROJO (no pasa) y version-b en VERDE (pasa).
+name: Performance Gate - Versiones A y B
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versión a evaluar"
+        type: choice
+        options: [todas, version-a, version-b]
+        default: todas
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Gate ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false          # que una versión en rojo no cancele la otra
+      matrix:
+        version: ${{ fromJSON((inputs.version == '' || inputs.version == 'todas') && '["version-a","version-b"]' || format('["{0}"]', inputs.version)) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Performance Quality Gate
+        id: gate
+        uses: ./                 # en otro repo: <usuario>/perf-quality-gate@v1
+        with:
+          baseline: examples/resultados/produccion-actual.csv
+          candidate: examples/resultados/${{ matrix.version }}.csv
+          config: perf-gate.yml
+          name: ${{ matrix.version }}
+
+      - name: Veredicto
+        if: always()
+        run: echo "${{ matrix.version }} → ${{ steps.gate.outputs.result }}"
