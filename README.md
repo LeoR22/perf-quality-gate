@@ -6,8 +6,10 @@ pipeline **en rojo** cuando no pasa. Cada equipo ajusta sus límites, incluso un
 
 | Pipeline | Qué hace |
 |---|---|
-| [`CI - Build & Test`](.github/workflows/ci.yml) | Construye la herramienta: tests unitarios (Python 3.10 y 3.12), smoke test de la action y release con tag `v1` |
-| [`Performance Gate - Versiones A y B`](.github/workflows/performance-gate.yml) | Usa la herramienta: evalúa `version-a` y `version-b` contra producción |
+| [`CI - Build & Test`](.github/workflows/ci.yml) | Construye la herramienta: tests (Python 3.10 y 3.12), verificación del README, integración del consumidor y release inmutable `vX.Y.Z` |
+| [`Integración del consumidor`](.github/workflows/integration.yml) | Ejecuta la action como un equipo y verifica el contrato: A da FAIL, B pasa y un dato inválido bloquea con error |
+| [`Promover tag mayor`](.github/workflows/promote.yml) | Manual: vuelve a validar una release y solo entonces mueve `v1` |
+| [`Performance Gate - Versiones A y B`](.github/workflows/performance-gate.yml) | Manual: demostración con la action local. La principal está en [perf-gate-demo](https://github.com/LeoR22/perf-gate-demo) |
 
 **Dos repositorios:** este tiene la herramienta. [`perf-gate-demo`](https://github.com/LeoR22/perf-gate-demo)
 es el repo de un equipo que la consume como `LeoR22/perf-quality-gate@v1` y solo despliega si el gate pasa.
@@ -117,6 +119,19 @@ jobs:
 | `ai-model` | no | `openai/gpt-oss-120b, openai/gpt-oss-20b` | Modelos de Groq en orden de preferencia |
 
 **Outputs:** `result` (`PASS`/`WARN`/`FAIL`), `passed` (`true`/`false`), `headline`, `report-json`, `name`.
+
+### Versiones de la action
+
+| Referencia | Qué recibe el equipo | Cuándo usarla |
+|---|---|---|
+| `@v1.5.0` | Exactamente esa release. **Las releases son inmutables**: el CI se niega a publicar dos veces el mismo tag | Pipelines que necesitan reproducibilidad |
+| `@<sha del commit>` | Exactamente ese código, aunque alguien mueva un tag | Máxima reproducibilidad y seguridad de la cadena de suministro |
+| `@v1` | La última release `v1.x.y` **promovida** | Recibir correcciones compatibles sin tocar el pipeline |
+
+`v1` no se mueve solo al publicar una versión. Se mueve con el workflow manual **Promover tag mayor**,
+que vuelve a correr la integración del consumidor sobre esa release (A da FAIL, B pasa, un dato inválido
+bloquea) antes de moverlo. Se recomienda además proteger los tags `v*.*.*` con un *ruleset* del
+repositorio para que no se puedan reescribir.
 
 ### Estados y códigos de salida
 
