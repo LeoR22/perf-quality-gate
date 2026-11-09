@@ -5,7 +5,7 @@ from __future__ import annotations
 from html import escape
 
 from .compare import EndpointResult, GateResult, Status
-from .report import headline
+from .report import headline, warmup_rows
 
 _STATUS = {
     Status.PASS: ("good", "✓", "Pasa"),
@@ -186,6 +186,15 @@ def to_html(r: GateResult) -> str:
 </div>
 <h2>Detalle</h2>
 <div class="card">{_table(r.endpoints)}</div>
+<h2>Arranque (calentamiento)</h2>
+<div class="card"><p class="sub" style="margin:0 0 10px">Los primeros {b.warmup_s:.0f} s se excluyen de la
+comparación por endpoint para medir el rendimiento estable. Se miden aparte porque los usuarios los sufren en cada
+despliegue; su degradación se evalúa con <code>stabilization_policy: {escape(r.stabilization_policy)}</code>
+(info | warn | fail).</p>
+<div class="scroll"><table><tr><th>Arranque</th><th></th><th>Producción</th><th>Nueva</th></tr>
+{"".join(f"<tr><td>{escape(label)}</td><td></td><td>{escape(bv)}</td><td>{escape(cv)}</td></tr>"
+         for label, bv, cv in warmup_rows(r))}
+</table></div></div>
 {f'<h2>Por qué y qué debería mejorar el equipo</h2><ul class="f">{findings}</ul>' if findings else ''}
 {('<details><summary>Calidad de datos (cómo se manejó lo raro)</summary><ul>'
   + ''.join(f'<li>{escape(f.message)}</li>' for f in notes) + '</ul></details>') if notes else ''}

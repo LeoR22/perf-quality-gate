@@ -73,8 +73,19 @@ class RunStats:
     throughput_rps: float            # peticiones/segundo en estado estable
     error_rate_pct: float            # en estado estable
     stabilization_s: float | None    # cuánto tardó en estabilizarse
-    endpoints: dict[str, EndpointStats]
+    endpoints: dict[str, EndpointStats]      # SOLO fase estable (sin calentamiento)
     data_notes: list[str]
+    warmup_s: float = 0.0            # segundos excluidos realmente
+    warmup: WarmupStats | None = None        # métricas de la fase de calentamiento (no deciden por endpoint)
+
+
+@dataclass
+class WarmupStats:
+    """La fase excluida sigue medida y visible: excluirla de la comparación no la vuelve irrelevante."""
+    samples: int
+    avg: float
+    p95: float
+    error_rate_pct: float
 
 
 def stabilization_time(samples: list[Sample], start_ms: int, steady_avg: float,
@@ -105,12 +116,21 @@ def compute_run_stats(result: LoadTestResult, warmup_s: float) -> RunStats:
     end = max(s.timestamp_ms + s.elapsed_ms for s in samples)
     cutoff = start + warmup_s * 1000
     steady = [s for s in samples if s.timestamp_ms >= cutoff]
+    warm = [s for s in samples if s.timestamp_ms < cutoff]
     notes = list(result.data_notes)
+    applied = float(warmup_s)
     if not steady:
         notes.append(
             f"La ventana de calentamiento ({warmup_s:.0f}s) cubre toda la prueba; se usan todas las peticiones."
         )
-        steady, cutoff = samples, start
+        steady, warm, cutoff, applied = samples, [], start, 0.0
+    warm_values = sorted(s.elapsed_ms for s in warm)
+    warmup = WarmupStats(
+        samples=len(warm),
+        avg=sum(warm_values) / len(warm_values),
+        p95=percentile(warm_values, 95),
+        error_rate_pct=100.0 * sum(1 for s in warm if not s.success) / len(warm),
+    ) if warm else None
 
     steady_duration = max((end - cutoff) / 1000.0, 1e-9)
     by_label: dict[str, list[Sample]] = defaultdict(list)
@@ -129,4 +149,6 @@ def compute_run_stats(result: LoadTestResult, warmup_s: float) -> RunStats:
         stabilization_s=stabilization_time(samples, start, steady_avg),
         endpoints={lbl: endpoint_stats(lbl, ss) for lbl, ss in sorted(by_label.items())},
         data_notes=notes,
+        warmup_s=applied,
+        warmup=warmup,
     )

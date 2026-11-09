@@ -205,6 +205,52 @@ def test_warmup_is_excluded_but_reported(tmp_path):
     assert any("estabilizarse" in f.message for f in r.global_findings)
 
 
+def test_steady_metrics_do_not_mix_warmup_records(tmp_path):
+    eps = {"GET /a": (100, 0)}
+    run_ = write_csv(tmp_path / "c.csv", eps, warmup_factor=10, warmup_s=30)  # 1000 ms durante 30 s
+    stats = compute_run_stats(load_results(run_), 60)
+    assert stats.endpoints["GET /a"].max < 200                    # nada del calentamiento en la fase estable
+    assert stats.warmup.p95 > 900 and stats.warmup_s == 60         # pero el calentamiento se mide aparte
+    assert stats.warmup.samples + stats.steady_samples == stats.total_samples
+
+
+def _cold_start_pair(tmp_path):
+    eps = {"GET /a": (100, 0)}
+    return (write_csv(tmp_path / "b.csv", eps, warmup_factor=2, warmup_s=10),
+            write_csv(tmp_path / "c.csv", eps, warmup_factor=4, warmup_s=50))
+
+
+@pytest.mark.parametrize("policy,status,exit_code", [
+    ("info", Status.PASS, 0), ("warn", Status.WARN, 0), ("fail", Status.FAIL, 1),
+])
+def test_startup_policy_is_configurable(tmp_path, policy, status, exit_code):
+    base, cand = _cold_start_pair(tmp_path)
+    cfg = tmp_path / "cfg.yml"
+    cfg.write_text(f"global:\n  stabilization_policy: {policy}\n", encoding="utf-8")
+    r = run(base, cand, cfg)
+    assert r.status == status and r.exit_code == exit_code
+    assert r.endpoints[0].status == Status.PASS                    # el estado estable es igual
+
+
+def test_startup_degradation_stays_visible_even_with_info(tmp_path):
+    from perf_gate.report import to_markdown
+    base, cand = _cold_start_pair(tmp_path)
+    cfg = tmp_path / "cfg.yml"
+    cfg.write_text("global:\n  stabilization_policy: info\n", encoding="utf-8")
+    md = to_markdown(run(base, cand, cfg))
+    assert "Arranque (calentamiento)" in md and "primeros **60 s**" in md
+    assert "Tiempo hasta estabilizarse" in md and "p95 durante el calentamiento" in md
+    assert "stabilization_policy: info" in md
+
+
+def test_without_warmup_window_there_is_no_spurious_warning(tmp_path):
+    eps = {"GET /a": (100, 0)}
+    cfg = tmp_path / "cfg.yml"
+    cfg.write_text("global:\n  warmup_seconds: 0\n", encoding="utf-8")
+    r = run(write_csv(tmp_path / "b.csv", eps), write_csv(tmp_path / "c.csv", eps, seed=2), cfg)
+    assert r.status == Status.PASS and r.baseline.warmup is None
+
+
 def test_new_and_sparse_endpoints_warn_not_fail(tmp_path):
     base = write_csv(tmp_path / "b.csv", {"GET /a": (100, 0)})
     cand = write_csv(tmp_path / "c.csv", {"GET /a": (100, 0), "POST /nuevo": (200, 0)})

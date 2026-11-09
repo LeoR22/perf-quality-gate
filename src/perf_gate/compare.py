@@ -62,6 +62,7 @@ class GateResult:
     candidate: RunStats
     endpoints: list[EndpointResult]
     global_findings: list[Finding]
+    stabilization_policy: str = "warn"
 
     @property
     def findings(self) -> list[Finding]:
@@ -73,7 +74,7 @@ class GateResult:
 
 
 def _policy_status(policy: str) -> Status | None:
-    return {"fail": Status.FAIL, "warn": Status.WARN, "ignore": None}[policy]
+    return {"fail": Status.FAIL, "warn": Status.WARN, "info": None, "ignore": None}[policy]
 
 
 def error_increase_is_significant(b_errors: int, b_n: int, c_errors: int, c_n: int,
@@ -206,18 +207,30 @@ def _global_checks(base: RunStats, cand: RunStats, cfg: GateConfig) -> list[Find
                 f"{cand.throughput_rps:.1f} req/s); límite -{g.max_throughput_decrease_pct:.0f}%.",
                 "Con los mismos usuarios se atienden menos peticiones: buscar el cuello de botella."))
 
+    # ---- Arranque (cold start): se mide aunque se excluya de la comparación por endpoint.
     bs, cs = base.stabilization_s, cand.stabilization_s
+    reasons = []
+    if bs is not None and cs is not None and cs - bs > g.max_stabilization_increase_s:
+        reasons.append(f"tarda {cs:.0f}s en estabilizarse vs {bs:.0f}s en producción (+{cs - bs:.0f}s; "
+                       f"límite +{g.max_stabilization_increase_s:.0f}s)")
+    bw, cw = base.warmup, cand.warmup
+    if bw and cw and bw.p95 > 0:
+        inc = 100.0 * (cw.p95 - bw.p95) / bw.p95
+        if inc > g.max_warmup_p95_increase_pct:
+            reasons.append(f"p95 durante el calentamiento de {cw.p95:.0f} ms vs {bw.p95:.0f} ms "
+                           f"(+{inc:.0f}%; límite +{g.max_warmup_p95_increase_pct:.0f}%)")
     st = _policy_status(g.stabilization_policy)
-    if st and bs is not None and cs is not None and cs - bs > g.max_stabilization_increase_s:
-        out.append(Finding(st, "global",
-            f"Tarda {cs:.0f}s en estabilizarse vs {bs:.0f}s en producción "
-            f"(+{cs - bs:.0f}s). Ese arranque se excluyó del análisis.",
+    if st and reasons:
+        out.append(Finding(st, "arranque",
+            "Degradación de arranque: " + "; ".join(reasons) + ". Ese periodo no entra en la comparación "
+            "por endpoint, pero los usuarios lo sufren en cada despliegue.",
             "Revisar el arranque en frío: precalentar cachés, pools de conexiones y JIT. En producción "
-            "afecta cada despliegue y cada nueva instancia que levante el autoescalado."))
-    if cs is None or cs >= g.warmup_seconds:
-        out.append(Finding(Status.WARN, "global",
+            "afecta cada despliegue y cada nueva instancia que levante el autoescalado. Si el servicio "
+            "escala seguido o tiene SLA estricto de disponibilidad, usar stabilization_policy: fail."))
+    if g.warmup_seconds > 0 and cand.warmup_s > 0 and (cs is None or cs >= g.warmup_seconds):
+        out.append(Finding(Status.WARN, "arranque",
             f"La versión no se estabilizó dentro de la ventana de calentamiento de {g.warmup_seconds:.0f}s; "
-            "las métricas pueden incluir parte del arranque.",
+            "las métricas de la fase estable pueden incluir parte del arranque.",
             "Aumentar warmup_seconds o la duración de la prueba."))
 
     for run, who in ((base, "producción"), (cand, "versión candidata")):
@@ -234,4 +247,5 @@ def evaluate(base: RunStats, cand: RunStats, cfg: GateConfig, candidate_name: st
     global_findings = _global_checks(base, cand, cfg)
     status = worst(Status.PASS, *(e.status for e in endpoints), *(f.status for f in global_findings))
     failing = status == Status.FAIL or (status == Status.WARN and cfg.global_rules.fail_on_warnings)
-    return GateResult(candidate_name, status, 1 if failing else 0, base, cand, endpoints, global_findings)
+    return GateResult(candidate_name, status, 1 if failing else 0, base, cand, endpoints, global_findings,
+                      cfg.global_rules.stabilization_policy)

@@ -7,15 +7,17 @@ from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import Any
 
-POLICIES = ("fail", "warn", "ignore")
+POLICIES = ("fail", "warn", "info", "ignore")   # info e ignore: se informa, no bloquea ni advierte
 
 
 @dataclass(frozen=True)
 class GlobalRules:
-    warmup_seconds: float = 60            # se descarta el arranque de la prueba
+    warmup_seconds: float = 60            # fase de calentamiento: se mide aparte y no entra en la comparación
     max_throughput_decrease_pct: float = 15
-    max_stabilization_increase_s: float = 20
-    stabilization_policy: str = "warn"    # tardar más en calentar: warn | fail | ignore
+    # Degradación de ARRANQUE (cold start), evaluada con stabilization_policy:
+    max_stabilization_increase_s: float = 20      # tarda más en estabilizarse que producción
+    max_warmup_p95_increase_pct: float = 50       # p95 durante el calentamiento vs el de producción
+    stabilization_policy: str = "warn"    # info | warn | fail  (fail: el cold start bloquea el despliegue)
     new_endpoint_policy: str = "warn"     # endpoint que no existe en producción
     missing_endpoint_policy: str = "warn"  # endpoint de producción que no se probó
     fail_on_warnings: bool = False

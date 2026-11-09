@@ -2,10 +2,12 @@
 # Todo es opcional: lo que no se defina toma el valor por defecto (ver README).
 
 global:
-  warmup_seconds: 60                # se descarta el primer minuto (calentamiento / ramp-up)
+  warmup_seconds: 60                # el primer minuto se mide aparte y no entra en la comparación por endpoint
   max_throughput_decrease_pct: 15   # el throughput total no puede caer más de 15 %
-  max_stabilization_increase_s: 20  # tardar más de 20 s extra en estabilizarse...
-  stabilization_policy: warn        # ...genera advertencia (warn | fail | ignore)
+  # Degradación de arranque (cold start):
+  max_stabilization_increase_s: 20  # más de 20 s extra para estabilizarse, o...
+  max_warmup_p95_increase_pct: 50   # ...p95 del calentamiento +50 % sobre producción...
+  stabilization_policy: warn        # ...se trata como: info | warn | fail (fail si hay autoscaling o SLA estricto)
   new_endpoint_policy: warn         # endpoint sin línea base en producción
   missing_endpoint_policy: warn     # endpoint de producción que no se probó
   fail_on_warnings: false

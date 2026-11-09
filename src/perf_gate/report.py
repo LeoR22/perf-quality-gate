@@ -50,8 +50,12 @@ def to_text(r: GateResult) -> str:
         )
     lines.append(
         f"\nThroughput (estado estable): {r.baseline.throughput_rps:.1f} → {r.candidate.throughput_rps:.1f} req/s"
-        f" | Estabilización: {_ms(r.baseline.stabilization_s)}s → {_ms(r.candidate.stabilization_s)}s"
     )
+    lines.append(f"\nArranque (excluido de la comparación por endpoint; política: {r.stabilization_policy}):")
+    for label, bv, cv in warmup_rows(r):
+        lines.append(f"  {label:34} {bv:>22} → {cv}")
+    if r.baseline.warmup_s == 0:
+        lines.append("  (sin ventana de calentamiento: todas las peticiones entran en la comparación)")
     probs = _problems(r)
     if probs:
         lines.append("\nPor qué y qué mejorar:")
@@ -64,6 +68,25 @@ def to_text(r: GateResult) -> str:
         lines.append("\nCalidad de datos:")
         lines.extend(f"  - {f.message}" for f in notes)
     return "\n".join(lines)
+
+
+def warmup_rows(r: GateResult) -> list[tuple[str, str, str]]:
+    """Filas comparables de la fase de calentamiento (las usan consola, Markdown y HTML)."""
+    def window(run) -> str:
+        n = run.warmup.samples if run.warmup else 0
+        return f"{run.warmup_s:.0f} s ({n} peticiones)"
+
+    def w(run, attr, fmt) -> str:
+        return fmt(getattr(run.warmup, attr)) if run.warmup else "—"
+
+    b, c = r.baseline, r.candidate
+    return [
+        ("Ventana excluida", window(b), window(c)),
+        ("Tiempo hasta estabilizarse", f"{_ms(b.stabilization_s)} s", f"{_ms(c.stabilization_s)} s"),
+        ("p95 durante el calentamiento", w(b, "p95", lambda v: f"{v:.0f} ms"), w(c, "p95", lambda v: f"{v:.0f} ms")),
+        ("Errores durante el calentamiento", w(b, "error_rate_pct", lambda v: f"{v:.2f}%"),
+         w(c, "error_rate_pct", lambda v: f"{v:.2f}%")),
+    ]
 
 
 # ---------------------------------------------------------------- markdown
@@ -104,9 +127,18 @@ def to_markdown(r: GateResult, limits: dict[str, float] | None = None) -> str:
         "|---|---:|---:|",
         f"| Throughput (req/s) | {r.baseline.throughput_rps:.1f} | {r.candidate.throughput_rps:.1f} |",
         f"| Tasa de error | {r.baseline.error_rate_pct:.2f}% | {r.candidate.error_rate_pct:.2f}% |",
-        f"| Tiempo hasta estabilizarse | {_ms(r.baseline.stabilization_s)} s | {_ms(r.candidate.stabilization_s)} s |",
         f"| Peticiones analizadas / totales | {r.baseline.steady_samples} / {r.baseline.total_samples} | "
         f"{r.candidate.steady_samples} / {r.candidate.total_samples} |",
+        "",
+        "### Arranque (calentamiento)",
+        "",
+        f"Se excluyen los primeros **{r.baseline.warmup_s:.0f} s** de la comparación por endpoint, para medir "
+        "el rendimiento estable. Excluirlos **no los vuelve irrelevantes**: se miden aparte y su degradación "
+        f"se evalúa con la política `stabilization_policy: {r.stabilization_policy}` (info | warn | fail).",
+        "",
+        "| Arranque | Producción | Nueva |",
+        "|---|---:|---:|",
+        *(f"| {label} | {bv} | {cv} |" for label, bv, cv in warmup_rows(r)),
         "",
     ]
     probs = sorted(_problems(r), key=lambda f: f.status != Status.FAIL)
