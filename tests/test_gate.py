@@ -104,6 +104,31 @@ def test_error_rate_regression_fails(tmp_path):
     assert "Tasa de error" in r.endpoints[0].findings[0].message
 
 
+def test_few_random_errors_are_not_a_regression():
+    """3 errores en 415 vs 0 en 420 (caso real de la demo con k6): +0,72 pp, pero es azar."""
+    from perf_gate.compare import error_increase_is_significant as sig
+    assert not sig(0, 420, 3, 415, 99)
+    assert sig(4, 1573, 39, 1170, 99)       # versión A del kit: 0,25 % → 3,33 %, claramente real
+    assert sig(0, 420, 3, 415, 0)            # 0 desactiva la prueba
+
+
+def test_error_confidence_is_configurable(tmp_path):
+    base = write_csv(tmp_path / "b.csv", {"GET /a": (100, 0)}, seconds=20)
+    cand = write_csv(tmp_path / "c.csv", {"GET /a": (100, 1.5)}, seconds=20, seed=7)
+    cfg = tmp_path / "cfg.yml"
+    cfg.write_text("global:\n  warmup_seconds: 0\ndefaults:\n  max_error_rate_pct: 5\n", encoding="utf-8")
+    strict = tmp_path / "strict.yml"
+    strict.write_text("global:\n  warmup_seconds: 0\ndefaults:\n  max_error_rate_pct: 5\n"
+                      "  error_confidence_pct: 0\n", encoding="utf-8")
+    from perf_gate.compare import error_increase_is_significant as sig
+    r_default, r_strict = run(base, cand, cfg), run(base, cand, strict)
+    b, c = r_default.endpoints[0].baseline, r_default.endpoints[0].candidate
+    assert 0.5 < c.error_rate_pct < 5, c.error_rate_pct
+    assert r_strict.status == Status.FAIL                       # sin prueba: cualquier +0,5 pp bloquea
+    expected = Status.FAIL if sig(b.errors, b.count, c.errors, c.count, 99) else Status.PASS
+    assert r_default.status == expected                         # con prueba: decide la evidencia
+
+
 def test_small_noise_below_min_increase_ms_is_ignored(tmp_path):
     # 10 ms -> 13 ms es +30 % pero solo 3 ms: ruido, no regresión.
     base = write_csv(tmp_path / "b.csv", {"GET /a": (10, 0)})
