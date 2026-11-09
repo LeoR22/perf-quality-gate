@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .compare import evaluate
 from .config import load_config
+from .html_report import to_html
 from .readers import load_results
 from .report import github_annotations, headline, to_json, to_markdown, to_text
 from .stats import compute_run_stats
@@ -52,9 +53,10 @@ def main(argv: list[str] | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "report.md").write_text(md, encoding="utf-8")
     (out_dir / "report.json").write_text(to_json(result), encoding="utf-8")
+    (out_dir / "report.html").write_text(to_html(result), encoding="utf-8")
 
     print(to_text(result))
-    print(f"\nReportes: {out_dir / 'report.md'} y {out_dir / 'report.json'}")
+    print(f"\nReportes en {out_dir}: report.html, report.md y report.json")
 
     if os.getenv("GITHUB_ACTIONS"):
         for line in github_annotations(result):
