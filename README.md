@@ -9,6 +9,9 @@ pipeline **en rojo** cuando no pasa. Cada equipo ajusta sus límites, incluso un
 | [`CI - Build & Test`](.github/workflows/ci.yml) | Construye la herramienta: tests unitarios (Python 3.10 y 3.12), smoke test de la action y release con tag `v1` |
 | [`Performance Gate - Versiones A y B`](.github/workflows/performance-gate.yml) | Usa la herramienta: evalúa `version-a` y `version-b` contra producción |
 
+**Dos repositorios:** este tiene la herramienta. [`perf-gate-demo`](https://github.com/LeoR22/perf-gate-demo)
+es el repo de un equipo que la consume como `LeoR22/perf-quality-gate@v1` y solo despliega si el gate pasa.
+
 ---
 
 ## ¿Cuál versión reemplaza a producción?
@@ -44,8 +47,15 @@ llamadas a servicios externos, locks, pools de conexiones) y revisar en los logs
 > que producción (p90 de "Consultar saldo" 582 ms vs 207 ms), porque su primer minuto es muy lento. Ese
 > mal resultado viene de su arranque, no de su rendimiento real, y por eso se reporta aparte como advertencia.
 
-Ejecuciones del pipeline: ver la pestaña **Actions** del repositorio (job `Gate version-a` en rojo y
-`Gate version-b` en verde, cada uno con su resumen visual).
+### Ejecuciones del pipeline
+
+En cada job, la pestaña **Summary** muestra el reporte visual endpoint por endpoint.
+
+| Dónde | Versión A | Versión B |
+|---|---|---|
+| Repo del equipo [`perf-gate-demo`](https://github.com/LeoR22/perf-gate-demo) (usa `@v1`) | [❌ gate en rojo, despliegue bloqueado](https://github.com/LeoR22/perf-gate-demo/actions/runs/42702445734/job/129450405621) | [✅ gate en verde, despliegue ejecutado](https://github.com/LeoR22/perf-gate-demo/actions/runs/42702445734/job/129450406297) |
+| Este repo (usa `./`) | [❌ Gate version-a](https://github.com/LeoR22/perf-quality-gate/actions/runs/42701821223/job/129448200812) | [✅ Gate version-b](https://github.com/LeoR22/perf-quality-gate/actions/runs/42701821223/job/129448200456) |
+| Build de la herramienta | [✅ CI - Build & Test](https://github.com/LeoR22/perf-quality-gate/actions/runs/42701821572) | [✅ Release v1.0.0](https://github.com/LeoR22/perf-quality-gate/releases/tag/v1.0.0) |
 
 ---
 
