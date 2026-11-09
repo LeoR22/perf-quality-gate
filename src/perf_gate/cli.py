@@ -20,7 +20,17 @@ def _append(path: str | None, text: str) -> None:
             fh.write(text + "\n")
 
 
+def _utf8_console() -> None:
+    """Consolas de Windows (cp1252) no imprimen ✅/❌: forzar UTF-8 y nunca caerse por eso."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _utf8_console()
     ap = argparse.ArgumentParser(prog="perf-gate", description="Performance Quality Gate")
     ap.add_argument("--baseline", required=True, help="Resultados de producción (línea base)")
     ap.add_argument("--candidate", required=True, help="Resultados de la versión nueva")
