@@ -88,8 +88,13 @@ jobs:
 | `fail-on-warnings` | no | `false` | Las advertencias también bloquean |
 | `report-dir` | no | `perf-gate-report` | Dónde quedan `report.md` y `report.json` |
 | `upload-report` | no | `true` | Sube el reporte como artifact |
+| `create-issue` | no | `false` | Documenta el defecto en GitHub Issues (requiere `permissions: issues: write`) |
+| `github-token` | no | `github.token` | Token para gestionar los issues |
+| `ai-summary` | no | `false` | Agrega un resumen y un plan de mejora redactados con IA (Groq, plan gratuito) |
+| `groq-api-key` | no | | API key de Groq (como secret). Sin ella, el resumen se omite |
+| `ai-model` | no | `openai/gpt-oss-120b, openai/gpt-oss-20b` | Modelos de Groq en orden de preferencia |
 
-**Outputs:** `result` (`PASS`/`WARN`/`FAIL`), `passed` (`true`/`false`), `headline`, `report-json`.
+**Outputs:** `result` (`PASS`/`WARN`/`FAIL`), `passed` (`true`/`false`), `headline`, `report-json`, `name`.
 
 **Qué produce en cada ejecución:**
 - Exit code `1` (pipeline en rojo) si no pasa; `2` si los archivos o la configuración son inválidos.
@@ -102,6 +107,35 @@ jobs:
 - `report.json` y `report.md` como artifact. El JSON incluye `rows`: una fila plana por endpoint
   (versión, endpoint, estado, ms de producción y de la versión nueva, cambio, errores, motivo), lista
   para graficar en **Grafana**, Excel o cualquier herramienta de BI.
+
+### Defectos e IA: ayudan, no deciden
+
+El veredicto siempre lo toma el gate con reglas deterministas y reproducibles. Lo demás es opcional,
+corre aunque el gate falle y **nunca cambia su resultado ni rompe el pipeline**:
+
+| Capacidad | Qué hace | Por qué así |
+|---|---|---|
+| **Defecto automático** (`create-issue`) | Si no pasa, abre el issue `[perf-gate] <versión> no pasa` con el reporte y el link a la ejecución; en las siguientes ejecuciones lo comenta, y lo **cierra solo** cuando la versión pasa | Documenta el defecto en el sistema de tracking sin trabajo manual y sin duplicados. No usa IA |
+| **Resumen con IA** (`ai-summary`) | Un LLM de [Groq](https://console.groq.com) (plan gratuito) redacta una explicación y un plan de mejora priorizado, en el resumen de la ejecución y en el issue | Solo recibe el reporte **agregado** (sin peticiones individuales ni datos de clientes). Si falta la key o la API falla, se omite con un aviso |
+| **Skill para asistentes de IA** ([`.claude/skills/perf-gate`](.claude/skills/perf-gate/SKILL.md)) | Enseña a un asistente (Claude Code u otro) a correr el gate, interpretar `report.json`, diagnosticar con la evidencia, proponer ajustes de límites con justificación y redactar el defecto | La IA trabaja en el flujo del desarrollador, no en el pipeline, y tiene una regla explícita: no relajar límites para que una versión pase |
+
+**Por qué la IA no decide:** un quality gate tiene que ser reproducible y auditable. Un LLM puede responder
+distinto con los mismos datos, depende de un servicio externo y en banca enviarle datos de producción es un
+tema de gobierno de datos. Por eso decide la regla y la IA solo explica.
+
+```yaml
+permissions:
+  contents: read
+  issues: write                     # para create-issue
+steps:
+  - uses: LeoR22/perf-quality-gate@v1
+    with:
+      baseline: resultados/produccion.csv
+      candidate: resultados/version-nueva.csv
+      create-issue: "true"
+      ai-summary: "true"
+      groq-api-key: ${{ secrets.GROQ_API_KEY }}
+```
 
 ### Uso local (sin GitHub)
 
