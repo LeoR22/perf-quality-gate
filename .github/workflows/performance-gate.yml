@@ -1,10 +1,9 @@
-# Pipeline que USA la herramienta: evalúa la versión A y la versión B contra producción.
-# Se espera: version-a en ROJO (no pasa) y version-b en VERDE (pasa).
+# Demostración manual con la action local (./). Se espera: version-a en ROJO y version-b en VERDE.
+# La demostración principal vive en el repo del equipo (perf-gate-demo), que consume @v1; aquí no
+# corre en cada push para que el repo de la herramienta refleje solo su propio build (CI).
 name: Performance Gate - Versiones A y B
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       version:
