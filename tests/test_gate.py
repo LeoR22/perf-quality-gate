@@ -171,6 +171,17 @@ def test_kit_version_b_passes(tmp_path):
     assert all(e["status"] != "FAIL" for e in report["endpoints"])
 
 
+def test_html_and_flat_rows_are_generated(tmp_path):
+    main(["--baseline", str(DATA / "produccion-actual.csv"), "--candidate",
+          str(DATA / "version-a.csv"), "--name", "version-a", "--report-dir", str(tmp_path)])
+    html = (tmp_path / "report.html").read_text(encoding="utf-8")
+    assert "<svg" in html and "POST /pagos" in html and "No pasa" in html
+    assert 'src="http' not in html and 'href="http' not in html  # autocontenido: sin recursos externos
+    rows = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))["rows"]
+    pagos = next(r for r in rows if r["endpoint"] == "POST /pagos")
+    assert pagos["version"] == "version-a" and pagos["status"] == "FAIL" and pagos["baseline_ms"] == 353.0
+
+
 def test_kit_with_team_config(tmp_path):
     args = ["--baseline", str(DATA / "produccion-actual.csv"), "--config", str(ROOT / "perf-gate.yml"),
             "--report-dir", str(tmp_path)]
