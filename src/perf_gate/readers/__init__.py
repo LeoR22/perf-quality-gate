@@ -1,6 +1,5 @@
-"""Registro de lectores. Para soportar una herramienta nueva (p. ej. k6) basta con
-agregar un lector que devuelva un LoadTestResult y registrarlo aquí: el comparador
-y los reportes no cambian."""
+"""Registro de lectores. Para soportar otra herramienta basta con agregar un lector que
+devuelva un LoadTestResult y registrarlo aquí: el comparador y los reportes no cambian."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,27 +7,25 @@ from typing import Callable
 
 from ..models import LoadTestResult
 from .jmeter_csv import looks_like_jmeter, read_jmeter_csv
-
-
-def _read_k6(path: str | Path) -> LoadTestResult:
-    raise NotImplementedError(
-        "El formato k6 aún no está soportado. Ver README > 'Cómo agregar k6'."
-    )
-
+from .k6 import looks_like_k6, read_k6
 
 READERS: dict[str, Callable[[str | Path], LoadTestResult]] = {
     "jmeter-csv": read_jmeter_csv,
-    "k6": _read_k6,
+    "k6": read_k6,  # --out json o --out csv
 }
 
 
 def detect_format(path: str | Path) -> str:
+    """Se decide por el contenido, no por la extensión (un .jtl, .csv o .json puede ser cualquiera)."""
     p = Path(path)
     if looks_like_jmeter(p):
         return "jmeter-csv"
-    if p.suffix.lower() == ".json":
+    if looks_like_k6(p):
         return "k6"
-    raise ValueError(f"No se reconoce el formato de {p}. Usa format: jmeter-csv | k6")
+    raise ValueError(
+        f"No se reconoce el formato de {p}. Formatos soportados: JMeter CSV, "
+        "k6 --out json, k6 --out csv. También puedes forzarlo con format: jmeter-csv | k6"
+    )
 
 
 def load_results(path: str | Path, fmt: str = "auto") -> LoadTestResult:
