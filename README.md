@@ -96,7 +96,12 @@ jobs:
 - **Resumen visual** en la página de la ejecución (Job Summary): tabla endpoint por endpoint frente a
   producción, qué falló y qué mejorar.
 - **Anotaciones** de error y advertencia, visibles en la lista de la ejecución.
-- `report.json` y `report.md` como artifact, por si otra herramienta los quiere consumir.
+- **`report.html`**: reporte visual autocontenido (sin dependencias externas, modo claro y oscuro) con
+  gráfico de barras producción vs versión nueva por endpoint, detalle y recomendaciones. Se puede
+  publicar en GitHub Pages (ver [perf-gate-demo](https://github.com/LeoR22/perf-gate-demo)).
+- `report.json` y `report.md` como artifact. El JSON incluye `rows`: una fila plana por endpoint
+  (versión, endpoint, estado, ms de producción y de la versión nueva, cambio, errores, motivo), lista
+  para graficar en **Grafana**, Excel o cualquier herramienta de BI.
 
 ### Uso local (sin GitHub)
 
@@ -204,7 +209,6 @@ métrica `http_req_duration` con `tags.name` como label y `http_req_failed` como
 ### Alcance recortado (por tiempo)
 
 - k6 no está implementado; el diseño ya lo contempla.
-- El reporte visual es el Job Summary de GitHub, no una página aparte.
 - La línea base se pasa como archivo. En un pipeline real se podría descargar automáticamente desde el
   último artifact de producción.
 
