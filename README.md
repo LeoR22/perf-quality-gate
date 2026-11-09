@@ -57,9 +57,9 @@ jobs:
   performance:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # ... aquí el equipo corre su prueba de carga (JMeter) y genera resultados/version-nueva.csv
-      - uses: <usuario>/perf-quality-gate@v1
+      - uses: LeoR22/perf-quality-gate@v1
         with:
           baseline: resultados/produccion-actual.csv
           candidate: resultados/version-nueva.csv

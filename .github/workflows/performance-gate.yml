@@ -29,7 +29,7 @@ jobs:
 
       - name: Performance Quality Gate
         id: gate
-        uses: ./                 # en otro repo: <usuario>/perf-quality-gate@v1
+        uses: ./                 # en otro repo: LeoR22/perf-quality-gate@v1
         with:
           baseline: examples/resultados/produccion-actual.csv
           candidate: examples/resultados/${{ matrix.version }}.csv
