@@ -1,0 +1,56 @@
+# Promoción DELIBERADA del alias mayor (p. ej. v1 → v1.5.0). Se ejecuta a mano desde Actions:
+# vuelve a correr la integración del consumidor sobre esa release y solo entonces mueve el alias.
+name: Promover tag mayor
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release a promover (vX.Y.Z, ya publicada)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    name: Validar la release
+    runs-on: ubuntu-latest
+    outputs:
+      major: ${{ steps.v.outputs.major }}
+    steps:
+      - id: v
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Formato esperado vX.Y.Z"; exit 1; }
+          gh release view "$VERSION" --repo "$REPO" >/dev/null || { echo "::error::$VERSION no está publicada"; exit 1; }
+          echo "major=${VERSION%%.*}" >> "$GITHUB_OUTPUT"
+
+  integracion:
+    name: Integración del consumidor
+    needs: validar
+    uses: ./.github/workflows/integration.yml
+    with:
+      ref: ${{ inputs.version }}
+
+  promover:
+    name: Mover ${{ needs.validar.outputs.major }} a ${{ inputs.version }}
+    needs: [validar, integracion]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - env:
+          VERSION: ${{ inputs.version }}
+          MAJOR: ${{ needs.validar.outputs.major }}
+        run: |
+          sha=$(git rev-list -n 1 "$VERSION")
+          git tag -f "$MAJOR" "$sha"
+          git push -f origin "refs/tags/$MAJOR"
+          echo "### $MAJOR → $VERSION ($sha)" >> "$GITHUB_STEP_SUMMARY"

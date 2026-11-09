@@ -1,10 +1,11 @@
-# Pipeline que CONSTRUYE la herramienta: tests unitarios, prueba de la action y release.
+# Pipeline que CONSTRUYE la herramienta: tests, verificación del README, integración del consumidor
+# y publicación de releases inmutables. El tag mayor (v1) NO se mueve aquí: ver promote.yml.
 name: CI - Build & Test
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ["v*.*.*"]
   pull_request:
 
 permissions:
@@ -24,39 +25,34 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: pip install -r requirements.txt -r requirements-dev.txt
       - run: python -m pytest -v
+      - name: El README coincide con los resultados calculados
+        if: matrix.python == '3.12'
+        run: python scripts/readme_results.py --check
 
-  action-smoke-test:
-    name: Smoke test de la action (misma versión debe pasar)
+  integracion:
+    name: Integración del consumidor
     needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - id: gate
-        uses: ./
-        with:
-          baseline: examples/resultados/produccion-actual.csv
-          candidate: examples/resultados/produccion-actual.csv
-          name: produccion-vs-produccion
-      - name: Verificar salida
-        run: |
-          echo "Resultado: ${{ steps.gate.outputs.result }}"
-          test "${{ steps.gate.outputs.passed }}" = "true"
+    uses: ./.github/workflows/integration.yml
+    with:
+      ref: ${{ github.sha }}
 
   release:
-    name: Publicar release
+    name: Publicar release (inmutable)
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, action-smoke-test]
+    needs: [test, integracion]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
-      - name: Crear release y mover el tag mayor (v1)
+      - name: Crear la release; nunca sobrescribir una existente
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
         run: |
-          gh release create "$TAG" --generate-notes || echo "La release ya existe"
-          MAJOR="${TAG%%.*}"
-          git tag -f "$MAJOR"
-          git push -f origin "$MAJOR"
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "::error::La release $TAG ya existe. Las releases son inmutables: publicar una versión nueva."
+            exit 1
+          fi
+          gh release create "$TAG" --repo "$REPO" --verify-tag --generate-notes \
+            --notes "Para fijar exactamente esta versión: \`uses: $REPO@$TAG\` (o el SHA del commit). El alias \`${TAG%%.*}\` se actualiza aparte, con el workflow *Promover tag mayor*."
