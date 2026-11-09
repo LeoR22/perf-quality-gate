@@ -18,34 +18,56 @@ es el repo de un equipo que la consume como `LeoR22/perf-quality-gate@v1` y solo
 
 ### ✅ La versión **B** reemplaza a producción. La versión **A** no pasa.
 
-Comparación en estado estable (sin el primer minuto de calentamiento), p95 en ms:
+<!-- resultados:inicio -->
+<!-- Generado por scripts/readme_results.py: no editar a mano. -->
+
+Fase estable (sin los primeros 60 s). Formato de cada celda: percentil en ms (cambio frente a producción) · tasa de error · muestras.
 
 | Endpoint | Producción | Versión A | Versión B |
+|---|---|---|---|
+| `Consultar saldo, cuenta ahorros` | p95 206 · 0.43% · n=1641 | ✅ p95 206 (+0%) · 0.25% · n=1196 | ✅ p95 207 (+0%) · 0.25% · n=1196 |
+| `GET /clientes` | p95 162 · 0.00% · n=1652 | ✅ p95 162 (+0%) · 0.24% · n=1258 | ✅ p95 162 (+0%) · 0.08% · n=1178 |
+| `GET /reportes` | p90 818 · 0.00% · n=3 | ⚠️ p90 813 (-1%) · 0.00% · n=3 | ⚠️ p90 2242 (+174%) · 0.00% · n=3 |
+| `POST /pagos` | p95 353 · 0.25% · n=1573 | ❌ p95 767 (+117%) · 3.33% · n=1170 | ✅ p95 353 (+0%) · 0.08% · n=1257 |
+| `POST /transferencias` | — (no existe) | ✅ p95 266 (sin línea base) · 0.25% · n=1201 | ✅ p95 265 (sin línea base) · 0.50% · n=1211 |
+
+| Global | Producción | Versión A | Versión B |
 |---|---:|---:|---:|
-| Consultar saldo, cuenta ahorros | 206 | 206 (+0 %) | 207 (+0 %) |
-| GET /clientes | 162 | 162 (+0 %) | 162 (+0 %) |
-| **POST /pagos** | 353 | **767 (+117 %, 2,2x)** ❌ | 353 (+0 %) ✅ |
-| Errores en POST /pagos | 0,25 % | **3,33 %** ❌ | 0,08 % ✅ |
-| POST /transferencias (nuevo) | — | 266 | 265 |
-| Throughput total | 20,3 req/s | 20,1 req/s | 20,2 req/s |
-| Tiempo hasta estabilizarse | 20 s | 20 s | **50 s** ⚠️ |
+| Throughput (fase estable) | 20.3 req/s | 20.1 req/s | 20.2 req/s |
+| Tasa de error (fase estable) | 0.23% | 0.99% | 0.23% |
+| Peticiones analizadas / totales | 4869 / 6083 | 4828 / 6047 | 4845 / 6059 |
+| Tiempo hasta estabilizarse | 20 s | 20 s | 50 s |
+| p95 durante el calentamiento | 659 ms | 1343 ms | 1166 ms |
 
-**Versión A — NO PASA.** El endpoint de pagos tarda más del doble que en producción (p95 767 ms vs
-353 ms) y su tasa de error sube de 0,25 % a 3,33 % (39 HTTP 500). También subió el tiempo al primer
-byte (239 → 518 ms), así que la demora está en el procesamiento del servidor y no en la red ni en el
-tamaño de la respuesta. **Qué mejorar:** perfilar `POST /pagos` bajo carga (consultas a base de datos,
-llamadas a servicios externos, locks, pools de conexiones) y revisar en los logs el origen de los 500.
+**Veredicto de la herramienta:**
 
-**Versión B — PASA, con dos advertencias que el equipo debería atender:**
-1. **Arranque en frío:** tarda unos 50 s en estabilizarse, contra 20 s en producción. Una vez estable,
-   rinde igual que producción. Ese arranque afecta cada despliegue y cada instancia nueva del
-   autoescalado. Se recomienda precalentar cachés, pools de conexiones y JIT.
-2. **`GET /reportes`** tiene solo 4 peticiones en toda la prueba (una de ellas de 2600 ms). No alcanza
-   para juzgarlo; hay que darle más peso en el plan de carga.
+- `version-a` → **FAIL** (exit 1): POST /pagos — p95 de 767 ms vs 353 ms en producción (+117%, 2.2x); límite +10%. (y 2 problema(s) más)
+- `version-b` → **WARN** (exit 0): no es más lenta que producción, pero revisa las advertencias.
 
-> ⚠️ **Por qué es importante excluir el calentamiento:** si se compara el archivo completo, B *parece* peor
-> que producción (p90 de "Consultar saldo" 582 ms vs 207 ms), porque su primer minuto es muy lento. Ese
-> mal resultado viene de su arranque, no de su rendimiento real, y por eso se reporta aparte como advertencia.
+Sin excluir el calentamiento, `Consultar saldo, cuenta ahorros` en B tendría p90 de 582 ms contra 207 ms en producción: B *parecería* peor por su arranque.
+
+Fuente: `examples/resultados/*.csv` con `perf-gate.yml`. Para reproducirlo: `python scripts/readme_results.py`.
+<!-- resultados:fin -->
+
+**Versión A: NO PASA.** `POST /pagos` tarda más del doble que en producción y su tasa de error sube de
+forma estadísticamente significativa. El tiempo al primer byte sube en la misma proporción, así que la
+demora está en el procesamiento del servidor, no en la red ni en el tamaño de la respuesta. **Qué mejorar:**
+perfilar `POST /pagos` bajo carga (base de datos, servicios externos, locks, pools de conexiones) y revisar
+en los logs el origen de los HTTP 500.
+
+**Versión B: PASA, con advertencias que el equipo debería atender:**
+1. **Arranque en frío:** tarda más que producción en estabilizarse y su p95 durante el calentamiento es
+   claramente mayor. Una vez estable, rinde igual que producción. Ese arranque no entra en la comparación
+   por endpoint, pero sigue medido y visible porque afecta cada despliegue y cada instancia nueva del
+   autoescalado. Si el servicio escala seguido o tiene un SLA estricto, se configura
+   `stabilization_policy: fail` y el cold start bloquea el despliegue.
+2. **`GET /reportes`** tiene 4 peticiones por prueba: una cae dentro del calentamiento y 3 en la fase
+   estable (las `n=3` de la tabla). No alcanza para juzgarlo, así que no decide el resultado. Hay que darle
+   más peso en el plan de carga.
+
+**Limitación:** hay una sola ejecución por versión. La herramienta compensa parte de la variabilidad
+(percentiles, ruido mínimo de 15 ms, significancia estadística en errores), pero para una decisión definitiva
+conviene repetir cada prueba al menos 3 veces y confirmar que el resultado se mantiene.
 
 ### Ejecuciones del pipeline
 
@@ -96,8 +118,19 @@ jobs:
 
 **Outputs:** `result` (`PASS`/`WARN`/`FAIL`), `passed` (`true`/`false`), `headline`, `report-json`, `name`.
 
+### Estados y códigos de salida
+
+| Estado | Significado | Exit | ¿Bloquea el pipeline? |
+|---|---|---:|---|
+| `PASS` | Cumple todas las reglas | 0 | No |
+| `WARN` | Hay advertencias no bloqueantes (endpoint nuevo, pocas muestras, arranque más lento, aumento de errores no significativo) | 0 | No, salvo con `fail_on_warnings: true` o `fail-on-warnings: "true"`, que devuelve 1 |
+| `FAIL` | Una o más reglas obligatorias no se cumplen | 1 | **Sí** |
+| Error de ejecución | Datos inválidos (por ejemplo `success` distinto de true/false), configuración inválida (YAML roto, tipo o clave incorrecta) o error interno | 2 | **Sí**, y nunca se reporta como PASS: no se genera el reporte |
+
+Los cuatro casos están cubiertos por tests (`test_exit_code_contract`, `test_invalid_config_is_exit_2_never_pass`,
+`test_invalid_data_never_ends_in_pass`, `test_unexpected_internal_error_is_exit_2`).
+
 **Qué produce en cada ejecución:**
-- Exit code `1` (pipeline en rojo) si no pasa; `2` si los archivos o la configuración son inválidos.
 - **Resumen visual** en la página de la ejecución (Job Summary): tabla endpoint por endpoint frente a
   producción, qué falló y qué mejorar.
 - **Anotaciones** de error y advertencia, visibles en la lista de la ejecución.
@@ -153,10 +186,11 @@ Todo es opcional. Ejemplo completo: [`perf-gate.yml`](perf-gate.yml).
 
 ```yaml
 global:
-  warmup_seconds: 60                # se descarta el arranque de la prueba
+  warmup_seconds: 60                # se mide aparte y no entra en la comparación por endpoint
   max_throughput_decrease_pct: 15
-  max_stabilization_increase_s: 20
-  stabilization_policy: warn        # warn | fail | ignore
+  max_stabilization_increase_s: 20  # degradación de arranque si tarda +20 s en estabilizarse...
+  max_warmup_p95_increase_pct: 50   # ...o su p95 de calentamiento sube +50 %
+  stabilization_policy: warn        # info | warn | fail
   new_endpoint_policy: warn         # endpoint sin línea base en producción
   missing_endpoint_policy: warn     # endpoint de producción que no se probó
   fail_on_warnings: false
@@ -179,9 +213,43 @@ endpoints:                          # nombre exacto o patrón glob ("POST /*")
 ```
 
 Por endpoint se puede sobrescribir: `percentile`, `max_increase_pct`, `min_increase_ms`, `max_ms`,
-`max_error_rate_pct`, `max_error_rate_increase_pp`, `error_confidence_pct`, `min_samples` e `ignore`. Primero se busca el nombre
-exacto y luego el primer patrón glob que coincida. Las claves mal escritas se rechazan con un error claro,
-para que un error de tipeo no desactive un límite sin que nadie se dé cuenta.
+`max_error_rate_pct`, `max_error_rate_increase_pp`, `error_confidence_pct`, `min_samples` e `ignore`.
+
+**Precedencia (de mayor a menor), por cada clave:**
+1. `endpoints."<nombre exacto>"`
+2. `endpoints."<patrón glob>"`: el **primero** que coincida, en el orden del archivo
+3. `defaults` del archivo
+4. Valores de fábrica de la herramienta (los de esta tabla)
+
+Un override solo cambia las claves que define; las demás se heredan del nivel siguiente. Las claves mal
+escritas, los tipos incorrectos (por ejemplo `max_increase_pct: veinte`) y las políticas desconocidas se
+rechazan con exit 2, para que un error de tipeo no desactive un límite sin que nadie se dé cuenta.
+
+### Métricas y estadística
+
+| Métrica | Cómo se calcula | Unidad |
+|---|---|---|
+| Fase estable | Peticiones con `timeStamp >= inicio + warmup_seconds`. Solo esta fase se compara por endpoint | — |
+| Percentil (p50/p90/p95/p99) | Interpolación lineal sobre `elapsed` ordenado (mismo criterio que numpy por defecto). Incluye peticiones exitosas y fallidas, como el agregado de JMeter | ms |
+| Tasa de error | `success = false` / peticiones, por endpoint y en la fase estable | % |
+| Throughput | Peticiones de la fase estable / (fin de la última petición − inicio de la fase estable) | req/s |
+| Tiempo de estabilización | Inicio del primer bloque de 10 s desde el cual todos los bloques tienen un promedio ≤ 1,25 × el promedio estable | s |
+| Calentamiento | Mismas métricas (p95, error) sobre las peticiones excluidas, para evaluar el arranque | ms, % |
+| TTFB (`Latency`) y `bytes` | Promedios que se usan solo para el diagnóstico (servidor frente a transferencia) | ms, bytes |
+
+**Aumento de la tasa de error.** Se evalúan dos reglas independientes:
+- **Límite absoluto** (`max_error_rate_pct`): se aplica siempre, sin ninguna prueba estadística. Una
+  versión no aprueba solo porque su diferencia con producción no sea significativa.
+- **Aumento frente a producción** (`max_error_rate_increase_pp`): bloquea solo si además es
+  estadísticamente significativo.
+  - Hipótesis: H0 dice que la tasa de la versión nueva es menor o igual que la de producción; H1, que es mayor (una cola).
+  - α = 1 − `error_confidence_pct`/100 (0,01 por defecto).
+  - Método: **prueba exacta de Fisher** si alguna frecuencia esperada de la tabla 2×2 es menor que 5;
+    **prueba z de dos proporciones** si no, porque la aproximación normal no es confiable con conteos bajos.
+  - El reporte indica el método y el valor p.
+  - Si el aumento supera el umbral pero no es significativo, queda como **WARN** y no se oculta.
+  - Limitaciones: supone peticiones independientes y muestra asociación, **no causalidad**.
+  - `error_confidence_pct: 0` desactiva la prueba.
 
 ### Por qué estos límites por defecto
 
@@ -191,7 +259,7 @@ para que un error de tipeo no desactive un límite sin que nadie se dé cuenta.
 | Máximo empeoramiento | +20 % | Margen para la variación normal entre corridas sin dejar pasar regresiones reales |
 | Diferencia mínima | 15 ms | En endpoints muy rápidos, +30 % pueden ser 3 ms: eso es ruido, no regresión |
 | Tasa de error | ≤ 1 % y ≤ +0,5 pp | Ser rápido no sirve si se falla más |
-| Significancia del aumento de errores | 99 % | Prueba z de dos proporciones: 3 errores sueltos en 400 peticiones no bloquean; un salto real (0,25 % → 3,3 % en 1.170 peticiones) sí. Se descubrió corriendo la demo real con k6 |
+| Significancia del aumento de errores | 99 % | 3 errores sueltos en 400 peticiones no bloquean; un salto real (0,25 % → 3,3 % en 1.170 peticiones) sí. Ver *Métricas y estadística* |
 | Muestras mínimas | 30 | Con menos, un percentil no es estadísticamente confiable |
 | Calentamiento | 60 s | En las tres pruebas, los primeros 10 s son entre 2 y 3,6 veces más lentos; B tarda 50 s en estabilizarse |
 | Throughput | −15 % | Con los mismos usuarios, atender menos peticiones indica un cuello de botella |
@@ -205,7 +273,7 @@ para que un error de tipeo no desactive un límite sin que nadie se dé cuenta.
 | 1 | `produccion-actual.csv` usa **`;`** como separador; A y B usan **`,`** | El separador se detecta a partir del encabezado |
 | 2 | La etiqueta `"Consultar saldo, cuenta ahorros"` tiene una coma adentro (entre comillas) | Se usa un parser CSV real que respeta comillas, no `split(',')` |
 | 3 | **Calentamiento:** el primer minuto es más lento en las tres pruebas. Producción y A se estabilizan en unos 20 s; B en unos 50 s | Se excluyen los primeros `warmup_seconds`, se mide el tiempo hasta estabilizarse y se advierte si empeora |
-| 4 | `GET /reportes` tiene solo 4 peticiones por prueba, todas al final del archivo y con el timestamp fuera de orden (parecen agregadas después) | Se ordena por timestamp. Con menos de `min_samples` muestras el endpoint no decide el resultado: se advierte |
+| 4 | `GET /reportes` tiene solo 4 peticiones por prueba (1 dentro del calentamiento y 3 en la fase estable), todas al final del archivo y con el timestamp fuera de orden (parecen agregadas después) | Se ordena por timestamp. Con menos de `min_samples` muestras el endpoint no decide el resultado: se advierte |
 | 5 | `POST /transferencias` no existe en producción | No tiene línea base: se valida contra límites absolutos (error, `max_ms`) y se advierte si no tiene SLA |
 | 6 | A y B reparten la carga entre 5 endpoints y producción entre 4, por eso cada endpoint tiene menos peticiones | El throughput se compara a nivel global, no por endpoint |
 | 7 | Duración real de 300 s, 50 hilos, `allThreads = 50` constante, sin duplicados ni valores negativos | Revisado: sin acciones. Las líneas inválidas se descartarían y se contarían en el reporte |
@@ -215,6 +283,32 @@ Todo esto aparece en la sección **"Calidad de datos"** de cada reporte.
 ---
 
 ## Diseño
+
+### Núcleo y extensiones
+
+El núcleo (el camino crítico) no depende de IA, Grafana ni Issues. Su única dependencia es PyYAML:
+
+```text
+CSV/JSON baseline + candidata + YAML
+        │
+        ▼
+Validación de entradas ──(inválido)──► exit 2
+        │
+        ▼
+Lector (JMeter | k6) → modelo neutral → métricas (fase estable + calentamiento)
+        │
+        ▼
+Motor de reglas por endpoint y globales ──► PASS / WARN / FAIL ──► exit 0 / 1  +  report.html/.md/.json
+```
+
+Las extensiones consumen el resultado **después** de la evaluación. Si fallan, el veredicto no cambia:
+
+| Extensión | Estado | Por defecto | Si falla o no está configurada |
+|---|---|---|---|
+| Lector k6 | Estable (validado con k6 2.2.0 real) | Se detecta por contenido | No afecta al caso JMeter |
+| Resumen con IA (Groq) | Opcional | **Desactivado** (`ai-summary: false`) | Aviso y se omite; exit del gate intacto |
+| Issues automáticos | Opcional | **Desactivado** (`create-issue: false`) | Aviso y se omite; exit del gate intacto |
+| Grafana (dashboard y demo Docker) | Opcional, en [perf-gate-demo](https://github.com/LeoR22/perf-gate-demo) | No forma parte de la action | No se usa para decidir ni para generar el reporte |
 
 ```
 src/perf_gate/
