@@ -1,0 +1,29 @@
+# Configuración del Performance Quality Gate para ESTE equipo.
+# Todo es opcional: lo que no se defina toma el valor por defecto (ver README).
+
+global:
+  warmup_seconds: 60                # se descarta el primer minuto (calentamiento / ramp-up)
+  max_throughput_decrease_pct: 15   # el throughput total no puede caer más de 15 %
+  max_stabilization_increase_s: 20  # tardar más de 20 s extra en estabilizarse...
+  stabilization_policy: warn        # ...genera advertencia (warn | fail | ignore)
+  new_endpoint_policy: warn         # endpoint sin línea base en producción
+  missing_endpoint_policy: warn     # endpoint de producción que no se probó
+  fail_on_warnings: false
+
+defaults:                           # aplica a todos los endpoints
+  percentile: 95                    # se compara el p95 (50 | 90 | 95 | 99)
+  max_increase_pct: 20              # máximo +20 % vs producción
+  min_increase_ms: 15               # diferencias menores a 15 ms se consideran ruido
+  max_error_rate_pct: 1.0           # tasa de error máxima absoluta
+  max_error_rate_increase_pp: 0.5   # máximo +0.5 puntos porcentuales vs producción
+  min_samples: 30                   # con menos muestras no se juzga el endpoint
+
+endpoints:                          # límites distintos por endpoint (nombre exacto o patrón glob)
+  "POST /pagos":
+    max_increase_pct: 10            # pagos es crítico: más estricto
+    max_ms: 600                     # SLA absoluto de p95
+  "POST /transferencias":
+    max_ms: 600                     # endpoint nuevo: sin línea base, se valida contra el SLA
+  "GET /reportes":
+    percentile: 90
+    max_increase_pct: 50            # reporte batch: más tolerante
