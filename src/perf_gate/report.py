@@ -150,7 +150,30 @@ def to_json(r: GateResult) -> str:
         "headline": headline(r), "baseline": run(r.baseline), "candidate_run": run(r.candidate),
         "global_findings": [_f(f) for f in r.global_findings],
         "endpoints": [ep(e) for e in r.endpoints],
+        "rows": rows(r),
     }, ensure_ascii=False, indent=2)
+
+
+def rows(r: GateResult) -> list[dict]:
+    """Una fila plana por endpoint: fácil de graficar en Grafana, Excel o cualquier BI."""
+    out = []
+    for e in r.endpoints:
+        b, c, p = e.baseline, e.candidate, e.percentile
+        out.append({
+            "version": r.candidate_name,
+            "endpoint": e.label,
+            "status": e.status.value,
+            "percentile": p,
+            "baseline_ms": round(b.pct(p), 1) if b else None,
+            "candidate_ms": round(c.pct(p), 1) if c else None,
+            "change_pct": None if e.change_pct is None else round(e.change_pct, 1),
+            "baseline_error_pct": round(b.error_rate_pct, 2) if b else None,
+            "candidate_error_pct": round(c.error_rate_pct, 2) if c else None,
+            "baseline_samples": b.count if b else 0,
+            "candidate_samples": c.count if c else 0,
+            "reason": " | ".join(f.message for f in e.findings if f.status in (Status.FAIL, Status.WARN)),
+        })
+    return out
 
 
 # ---------------------------------------------------------------- anotaciones GitHub
