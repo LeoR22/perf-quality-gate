@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     _append(os.getenv("GITHUB_STEP_SUMMARY"), md)
     _append(os.getenv("GITHUB_OUTPUT"),
             f"result={result.status.value}\npassed={'true' if result.exit_code == 0 else 'false'}\n"
-            f"headline={headline(result)}\nreport-json={out_dir / 'report.json'}")
+            f"headline={headline(result)}\nreport-json={out_dir / 'report.json'}\nname={name}")
     return result.exit_code
 
 
