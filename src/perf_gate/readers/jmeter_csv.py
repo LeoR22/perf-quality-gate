@@ -30,8 +30,9 @@ def _to_int(value: str) -> int | None:
 
 def looks_like_jmeter(path: Path) -> bool:
     try:
-        first = path.read_text(encoding="utf-8-sig", errors="replace").splitlines()[0]
-    except (OSError, IndexError):
+        with path.open(encoding="utf-8-sig", errors="replace") as fh:
+            first = fh.readline()
+    except OSError:
         return False
     return "timeStamp" in first and "elapsed" in first
 
