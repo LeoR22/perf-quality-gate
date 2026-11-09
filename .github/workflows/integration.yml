@@ -1,0 +1,71 @@
+# Prueba de integración del CONSUMIDOR: ejecuta la action como la usaría un equipo y verifica el
+# contrato de salida desde GitHub Actions. La reutilizan el CI y la promoción del tag mayor.
+name: Integración del consumidor
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Ref (tag o commit) de la action a probar"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  contrato:
+    name: Contrato de la action (${{ inputs.ref }})
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Versión A debe dar FAIL (exit 1)
+        id: a
+        continue-on-error: true
+        uses: ./
+        with:
+          baseline: examples/resultados/produccion-actual.csv
+          candidate: examples/resultados/version-a.csv
+          config: perf-gate.yml
+          name: integracion-a
+          upload-report: "false"
+
+      - name: Versión B debe pasar (exit 0)
+        id: b
+        uses: ./
+        with:
+          baseline: examples/resultados/produccion-actual.csv
+          candidate: examples/resultados/version-b.csv
+          config: perf-gate.yml
+          name: integracion-b
+          upload-report: "false"
+
+      - name: Preparar un CSV con un dato crítico inválido
+        run: |
+          mkdir -p tmp
+          cp examples/resultados/version-b.csv tmp/invalido.csv
+          echo '1762500100000,50,GET /clientes,200,OK,Usuarios 1-1,tru,1000,40,50' >> tmp/invalido.csv
+
+      - name: Dato inválido debe bloquear (exit 2) y nunca dar PASS
+        id: bad
+        continue-on-error: true
+        uses: ./
+        with:
+          baseline: examples/resultados/produccion-actual.csv
+          candidate: tmp/invalido.csv
+          name: integracion-invalido
+          upload-report: "false"
+
+      - name: Verificar el contrato
+        run: |
+          set -x
+          test "${{ steps.a.outcome }}" = "failure"
+          test "${{ steps.a.outputs.result }}" = "FAIL"
+          test "${{ steps.b.outcome }}" = "success"
+          test "${{ steps.b.outputs.passed }}" = "true"
+          test "${{ steps.bad.outcome }}" = "failure"
+          test -z "${{ steps.bad.outputs.result }}"   # sin veredicto: no se reportó PASS
+          echo "Contrato OK: A=FAIL, B=${{ steps.b.outputs.result }}, dato inválido=error"
