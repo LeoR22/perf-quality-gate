@@ -60,15 +60,74 @@ def test_reads_semicolon_and_quoted_label_with_comma(tmp_path):
     assert any("Separador ';'" in n for n in r.data_notes)
 
 
-def test_sorts_out_of_order_and_drops_malformed(tmp_path):
+def test_sorts_out_of_order(tmp_path):
     p = write_csv(tmp_path / "p.csv", {"GET /x": (100, 0)}, seconds=5)
     with p.open("a", encoding="utf-8") as fh:
         fh.write("1762499999000,50,GET /x,200,OK,U,true,1,1,50\n")
-        fh.write("no-es-un-numero,50,GET /x,200,OK,U,true,1,1,50\n")
     r = load_results(p)
     assert r.samples[0].timestamp_ms == 1762499999000
     assert any("fuera de orden" in n for n in r.data_notes)
-    assert any("mal formadas" in n for n in r.data_notes)
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("true", True), ("false", False), ("TRUE", True), (" False ", False),
+])
+def test_success_accepts_only_true_or_false(raw, expected):
+    from perf_gate.readers.jmeter_csv import parse_success
+    assert parse_success(raw) is expected
+
+
+@pytest.mark.parametrize("raw", ["tru", "", "yes", "1", "0", "si", None])
+def test_success_rejects_anything_else(raw):
+    from perf_gate.readers.jmeter_csv import parse_success
+    with pytest.raises(ValueError, match="true o false"):
+        parse_success(raw)
+
+
+@pytest.mark.parametrize("bad_row,column", [
+    ("1762500001000,50,GET /x,200,OK,U,tru,1,1,50", "success"),
+    ("1762500001000,50,GET /x,200,OK,U,,1,1,50", "success"),
+    ("no-es-un-numero,50,GET /x,200,OK,U,true,1,1,50", "timeStamp"),
+    ("1762500001000,-5,GET /x,200,OK,U,true,1,1,50", "elapsed"),
+    ("1762500001000,12.5,GET /x,200,OK,U,true,1,1,50", "elapsed"),
+    ("1762500001000,50,,200,OK,U,true,1,1,50", "label"),
+])
+def test_invalid_critical_field_stops_with_line_and_column(tmp_path, bad_row, column):
+    from perf_gate.models import InvalidDataError
+    p = write_csv(tmp_path / "p.csv", {"GET /x": (100, 0)}, seconds=1)  # 20 filas: la mala es la 22
+    with p.open("a", encoding="utf-8") as fh:
+        fh.write(bad_row + "\n")
+    with pytest.raises(InvalidDataError, match=f"línea 22, columna {column}"):
+        load_results(p)
+
+
+def test_wrong_column_count_is_reported(tmp_path):
+    from perf_gate.models import InvalidDataError
+    p = write_csv(tmp_path / "p.csv", {"GET /x": (100, 0)}, seconds=1)
+    with p.open("a", encoding="utf-8") as fh:
+        fh.write("1762500001000,50,GET /x\n")
+    with pytest.raises(InvalidDataError, match="línea 22: número de columnas"):
+        load_results(p)
+
+
+def test_invalid_optional_column_is_ignored_with_note(tmp_path):
+    p = write_csv(tmp_path / "p.csv", {"GET /x": (100, 0)}, seconds=1)
+    with p.open("a", encoding="utf-8") as fh:
+        fh.write("1762500001000,50,GET /x,200,OK,U,true,n/a,1,50\n")  # bytes inválido
+    r = load_results(p)
+    assert any("columnas opcionales" in n for n in r.data_notes)
+
+
+def test_invalid_data_never_ends_in_pass(tmp_path, capsys):
+    """Un error de datos es exit 2: bloquea el pipeline y nunca se reporta como PASS."""
+    base = write_csv(tmp_path / "b.csv", {"GET /x": (100, 0)}, seconds=1)
+    cand = write_csv(tmp_path / "c.csv", {"GET /x": (100, 0)}, seconds=1)
+    with cand.open("a", encoding="utf-8") as fh:
+        fh.write("1762500001000,50,GET /x,200,OK,U,tru,1,1,50\n")
+    assert main(["--baseline", str(base), "--candidate", str(cand), "--report-dir", str(tmp_path / "r")]) == 2
+    err = capsys.readouterr().err
+    assert "línea 22, columna success" in err and "'tru'" in err
+    assert not (tmp_path / "r" / "report.json").exists()
 
 
 def test_missing_columns_is_a_clear_error(tmp_path):

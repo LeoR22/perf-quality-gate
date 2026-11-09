@@ -58,7 +58,27 @@ def test_failed_requests_and_truncated_last_line(tmp_path):
     r = load_results(p)
     assert [s.success for s in r.samples] == [True, False]
     assert r.samples[0].timestamp_ms == parse_time_ms(t1) - 100  # k6 marca el fin: se resta la duración
-    assert any("inválidos" in n for n in r.data_notes)
+    assert any("última línea estaba incompleta" in n for n in r.data_notes)
+
+
+T = "2026-01-01T10:00:00Z"
+OK_TAGS = {"name": "GET /x", "method": "GET", "status": "200"}
+
+
+@pytest.mark.parametrize("lines,expected", [
+    ([_point("http_req_duration", T, 100, **OK_TAGS), "{roto", _point("http_req_failed", T, 0, **OK_TAGS)],
+     "línea 2: JSON inválido"),                                  # línea corrupta en el medio: no se tolera
+    ([_point("http_req_duration", T, 100, **OK_TAGS), _point("http_req_failed", T, 2, **OK_TAGS)],
+     "debe ser 0 o 1"),
+    ([_point("http_req_duration", T, "abc", **OK_TAGS)], "valor inválido"),
+    ([_point("http_req_duration", "ayer", 100, **OK_TAGS)], "timestamp inválido"),
+])
+def test_invalid_critical_k6_data_stops_with_location(tmp_path, lines, expected):
+    from perf_gate.models import InvalidDataError
+    p = tmp_path / "out.json"
+    p.write_text("\n".join(lines), encoding="utf-8")
+    with pytest.raises(InvalidDataError, match=expected):
+        load_results(p)
 
 
 def test_summary_export_gives_clear_error(tmp_path):

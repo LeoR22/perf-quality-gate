@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from ..models import LoadTestResult, Sample
+from ..models import InvalidDataError, LoadTestResult, Sample
 
 DURATION, WAITING, FAILED = "http_req_duration", "http_req_waiting", "http_req_failed"
 _WANTED = {DURATION, WAITING, FAILED}
@@ -86,14 +86,28 @@ class _Builder:
         self.waiting: dict[tuple, list[float]] = {}
         self.failed: dict[tuple, list[float]] = {}
         self.order: list[tuple] = []
-        self.bad = 0
-        self.second_precision = False  # CSV de k6: timestamp en segundos enteros
+        self.errors: list[str] = []      # datos críticos inválidos: detienen la evaluación
+        self.optional_bad = 0            # TTFB inválido: solo afecta el diagnóstico
+        self.second_precision = False    # CSV de k6: timestamp en segundos enteros
 
-    def add(self, metric: str, time_raw, value, tags: dict) -> None:
+    def add(self, metric: str, time_raw, value, tags: dict, where: str = "") -> None:
         try:
             val = float(value)
         except (TypeError, ValueError):
-            self.bad += 1
+            val = None
+        if metric == WAITING and (val is None or val < 0):
+            self.optional_bad += 1
+            return
+        if val is None or val < 0:
+            self.errors.append(f"{where}: {metric} con valor inválido {value!r}")
+            return
+        if metric == FAILED and val not in (0.0, 1.0):
+            self.errors.append(f"{where}: {FAILED} debe ser 0 o 1 y llegó {value!r}")
+            return
+        try:
+            parse_time_ms(time_raw)
+        except ValueError:
+            self.errors.append(f"{where}: timestamp inválido {time_raw!r}")
             return
         k = _key(time_raw, tags)
         if metric == DURATION:
@@ -111,11 +125,7 @@ class _Builder:
         for k in self.order:
             waits, fails = self.waiting.get(k, []), self.failed.get(k, [])
             for i, (time_raw, dur, tags) in enumerate(self.durations[k]):
-                try:
-                    t_ms = parse_time_ms(time_raw)
-                except ValueError:
-                    self.bad += 1
-                    continue
+                t_ms = parse_time_ms(time_raw)  # ya validado en add()
                 if re.fullmatch(r"\d{9,10}", str(time_raw).strip()):
                     self.second_precision = True
                 status = str(tags.get("status", ""))
@@ -139,21 +149,26 @@ class _Builder:
         return out
 
 
-def _read_json(path: Path, b: _Builder) -> tuple[int, bool]:
+def _read_json(path: Path, b: _Builder) -> tuple[bool, bool]:
+    """Devuelve (hay puntos, la última línea estaba cortada)."""
     lines, has_points = 0, False
+    pending_bad: int | None = None  # una línea ilegible solo se tolera si resulta ser la ÚLTIMA
     with path.open(encoding="utf-8-sig", errors="replace") as fh:
-        for line in fh:  # línea por línea: los archivos de k6 pueden pesar GB
+        for number, line in enumerate(fh, start=1):  # línea por línea: los archivos de k6 pueden pesar GB
             line = line.strip()
             if not line:
                 continue
+            if pending_bad is not None:
+                b.errors.append(f"línea {pending_bad}: JSON inválido")
+                pending_bad = None
             lines += 1
             try:
                 obj = json.loads(line)
             except json.JSONDecodeError:
-                b.bad += 1  # p. ej. última línea cortada si k6 se interrumpió
+                pending_bad = number
                 continue
             if lines == 1 and "metrics" in obj and "type" not in obj:
-                raise ValueError(
+                raise InvalidDataError(
                     f"{path}: es el resumen agregado de k6 (--summary-export), sin peticiones "
                     "individuales. Ejecuta k6 con --out json=resultados.json o --out csv=resultados.csv"
                 )
@@ -163,8 +178,8 @@ def _read_json(path: Path, b: _Builder) -> tuple[int, bool]:
             metric = obj.get("metric")
             if metric in _WANTED:
                 data = obj.get("data") or {}
-                b.add(metric, data.get("time"), data.get("value"), data.get("tags") or {})
-    return lines, has_points
+                b.add(metric, data.get("time"), data.get("value"), data.get("tags") or {}, f"línea {number}")
+    return has_points, pending_bad is not None
 
 
 def _read_csv(path: Path, b: _Builder) -> None:
@@ -181,7 +196,7 @@ def _read_csv(path: Path, b: _Builder) -> None:
                 if "=" in pair:
                     k, v = pair.split("=", 1)
                     tags.setdefault(k, v)
-            b.add(metric, row.get("timestamp"), row.get("metric_value"), tags)
+            b.add(metric, row.get("timestamp"), row.get("metric_value"), tags, f"línea {reader.line_num}")
 
 
 def looks_like_k6(path: Path) -> str | None:
@@ -202,22 +217,32 @@ def read_k6(path: str | Path) -> LoadTestResult:
     path = Path(path)
     kind = looks_like_k6(path)
     if kind is None:
-        raise ValueError(f"{path}: no parece una salida de k6 (--out json o --out csv)")
+        raise InvalidDataError(f"{path}: no parece una salida de k6 (--out json o --out csv)")
 
     b = _Builder()
     notes: list[str] = [f"Resultados k6 ({kind.upper()}); etiquetas tomadas del tag 'name'."]
     if kind == "json":
-        _, has_points = _read_json(path, b)
+        has_points, truncated_tail = _read_json(path, b)
         if not has_points:
-            raise ValueError(f"{path}: el archivo k6 no tiene puntos de métricas (type=Point)")
+            raise InvalidDataError(f"{path}: el archivo k6 no tiene puntos de métricas (type=Point)")
+        if truncated_tail:
+            notes.append("La última línea estaba incompleta (k6 interrumpido al escribir); se ignoró.")
     else:
         _read_csv(path, b)
 
+    if b.errors:
+        shown = "\n  - ".join(b.errors[:10])
+        more = f"\n  ... y {len(b.errors) - 10} más" if len(b.errors) > 10 else ""
+        raise InvalidDataError(
+            f"{path}: {len(b.errors)} punto(s) inválido(s) en métricas críticas; no se evalúa para no "
+            f"decidir con datos corruptos:\n  - {shown}{more}"
+        )
     samples = b.samples()
     if not samples:
-        raise ValueError(f"{path}: no hay peticiones HTTP (métrica {DURATION})")
-    if b.bad:
-        notes.append(f"{b.bad} punto(s) de métricas inválidos se descartaron.")
+        raise InvalidDataError(f"{path}: no hay peticiones HTTP (métrica {DURATION})")
+    if b.optional_bad:
+        notes.append(f"{b.optional_bad} valor(es) inválido(s) de {WAITING} se ignoraron "
+                     "(solo afectan el diagnóstico, no la decisión).")
     if b.second_precision:
         notes.append("El CSV de k6 trae el tiempo en segundos: la ventana de calentamiento tiene "
                      "precisión de 1 s.")

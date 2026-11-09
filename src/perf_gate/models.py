@@ -4,6 +4,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+class InvalidDataError(ValueError):
+    """Los datos de entrada no permiten una evaluación confiable. El gate termina con exit 2."""
+
+
 @dataclass(frozen=True)
 class Sample:
     """Una petición hecha por un usuario virtual."""
