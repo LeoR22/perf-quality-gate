@@ -29,8 +29,35 @@ def _utf8_console() -> None:
             pass
 
 
+# Códigos de salida (contrato con el pipeline):
+EXIT_PASS = 0    # PASS, o WARN sin fail_on_warnings
+EXIT_FAIL = 1    # FAIL (o WARN con fail_on_warnings): la versión no pasa
+EXIT_ERROR = 2   # error de ejecución: entrada, configuración o error interno. Nunca se reporta como PASS
+
+
+def _error(kind: str, exc: BaseException) -> int:
+    msg = str(exc) or exc.__class__.__name__
+    if os.getenv("GITHUB_ACTIONS"):
+        msg = msg.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+        print(f"::error title=Perf gate: {kind}::{msg}", file=sys.stderr)
+    else:
+        print(f"ERROR ({kind}): {msg}", file=sys.stderr)
+    return EXIT_ERROR
+
+
 def main(argv: list[str] | None = None) -> int:
     _utf8_console()
+    try:
+        return _run(argv)
+    except SystemExit:
+        raise  # argparse ya imprime el uso y sale con 2
+    except Exception as exc:  # noqa: BLE001 - cualquier fallo inesperado bloquea con exit 2, nunca PASS
+        import traceback
+        traceback.print_exc()
+        return _error("error interno", exc)
+
+
+def _run(argv: list[str] | None) -> int:
     ap = argparse.ArgumentParser(prog="perf-gate", description="Performance Quality Gate")
     ap.add_argument("--baseline", required=True, help="Resultados de producción (línea base)")
     ap.add_argument("--candidate", required=True, help="Resultados de la versión nueva")
@@ -43,16 +70,17 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         cfg = load_config(args.config)
-        if args.fail_on_warnings:
-            from dataclasses import replace
-            cfg = replace(cfg, global_rules=replace(cfg.global_rules, fail_on_warnings=True))
+    except (OSError, ValueError, TypeError) as exc:
+        return _error("configuración inválida", exc)
+    if args.fail_on_warnings:
+        from dataclasses import replace
+        cfg = replace(cfg, global_rules=replace(cfg.global_rules, fail_on_warnings=True))
+    try:
         warmup = cfg.global_rules.warmup_seconds
         base = compute_run_stats(load_results(args.baseline, args.format), warmup)
         cand = compute_run_stats(load_results(args.candidate, args.format), warmup)
     except (OSError, ValueError, NotImplementedError) as exc:
-        print(f"::error title=Perf gate: error de entrada::{exc}" if os.getenv("GITHUB_ACTIONS")
-              else f"ERROR: {exc}", file=sys.stderr)
-        return 2
+        return _error("datos de entrada inválidos", exc)
 
     name = args.name or Path(args.candidate).stem
     result = evaluate(base, cand, cfg, name)

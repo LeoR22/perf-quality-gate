@@ -358,5 +358,55 @@ def test_kit_with_team_config(tmp_path):
     assert main(args + ["--candidate", str(DATA / "version-b.csv")]) == 0
 
 
+@pytest.mark.parametrize("config_text,expected_in_error", [
+    ("global: [esto no es: yaml válido", "no es un YAML/JSON válido"),
+    ("defaults:\n  max_increase_pct: veinte\n", "debe ser un número"),
+    ("defaults:\n  max_increase_pct: -5\n", "debe ser un número"),
+    ("global:\n  fail_on_warnings: si\n", "debe ser true o false"),
+    ("global:\n  stabilization_policy: maybe\n", "stabilization_policy"),
+    ("defaults:\n  max_increse_pct: 10\n", "claves desconocidas"),
+    ("- solo\n- una lista\n", "debe ser un mapa"),
+])
+def test_invalid_config_is_exit_2_never_pass(tmp_path, capsys, config_text, expected_in_error):
+    cfg = tmp_path / "cfg.yml"
+    cfg.write_text(config_text, encoding="utf-8")
+    code = main(["--baseline", str(DATA / "produccion-actual.csv"), "--candidate",
+                 str(DATA / "version-b.csv"), "--config", str(cfg), "--report-dir", str(tmp_path / "r")])
+    assert code == 2
+    assert expected_in_error in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("candidate,extra,expected", [
+    ("produccion-actual.csv", [], 0),                       # PASS
+    ("version-b.csv", [], 0),                               # WARN: no bloquea por defecto
+    ("version-b.csv", ["--fail-on-warnings"], 1),           # WARN con política estricta: bloquea
+    ("version-a.csv", [], 1),                               # FAIL
+])
+def test_exit_code_contract(tmp_path, candidate, extra, expected):
+    args = ["--baseline", str(DATA / "produccion-actual.csv"), "--candidate", str(DATA / candidate),
+            "--report-dir", str(tmp_path)]
+    assert main(args + extra) == expected
+
+
+def test_unexpected_internal_error_is_exit_2(tmp_path, monkeypatch):
+    import perf_gate.cli as cli
+    monkeypatch.setattr(cli, "evaluate", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert cli.main(["--baseline", str(DATA / "produccion-actual.csv"), "--candidate",
+                     str(DATA / "version-b.csv"), "--report-dir", str(tmp_path)]) == 2
+
+
+def test_new_and_missing_endpoints_are_not_zero(tmp_path):
+    """Un endpoint sin línea base (o sin datos nuevos) se reporta como ausente, nunca como 0 ms."""
+    main(["--baseline", str(DATA / "produccion-actual.csv"), "--candidate", str(DATA / "version-a.csv"),
+          "--report-dir", str(tmp_path)])
+    rows = {r["endpoint"]: r for r in json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))["rows"]}
+    assert rows["POST /transferencias"]["baseline_ms"] is None
+    assert rows["POST /transferencias"]["change_pct"] is None
+    main(["--baseline", str(DATA / "version-a.csv"), "--candidate", str(DATA / "produccion-actual.csv"),
+          "--report-dir", str(tmp_path / "x")])
+    rows2 = {r["endpoint"]: r for r in json.loads((tmp_path / "x" / "report.json").read_text(encoding="utf-8"))["rows"]}
+    assert rows2["POST /transferencias"]["candidate_ms"] is None
+
+
 def test_bad_input_returns_exit_2(tmp_path):
     assert main(["--baseline", "no-existe.csv", "--candidate", "x.csv", "--report-dir", str(tmp_path)]) == 2

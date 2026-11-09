@@ -64,16 +64,42 @@ def _check_keys(section: str, data: dict, cls_or_keys) -> dict:
         raise ValueError(
             f"Config '{section}': claves desconocidas {sorted(unknown)}. Válidas: {sorted(allowed)}"
         )
+    if not isinstance(cls_or_keys, (set, tuple, list)):
+        _check_types(section, data, cls_or_keys)
     return data
+
+
+def _check_types(section: str, data: dict, cls) -> None:
+    """El tipo esperado sale del valor por defecto: un número mal escrito no puede llegar a la evaluación."""
+    defaults = cls()
+    for key, value in data.items():
+        default = getattr(defaults, key)
+        where = f"Config '{section}.{key}'"
+        if isinstance(default, bool):
+            if not isinstance(value, bool):
+                raise ValueError(f"{where} debe ser true o false y es {value!r}")
+        elif isinstance(default, (int, float)) or default is None:  # max_ms es opcional (None)
+            if value is None and default is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+                raise ValueError(f"{where} debe ser un número >= 0 y es {value!r}")
+        elif isinstance(default, str) and not isinstance(value, str):
+            raise ValueError(f"{where} debe ser texto y es {value!r}")
 
 
 def _read_file(path: Path) -> dict:
     text = path.read_text(encoding="utf-8-sig")
-    if path.suffix.lower() == ".json":
-        return json.loads(text) or {}
-    import yaml  # solo se necesita para YAML
-
-    return yaml.safe_load(text) or {}
+    try:
+        if path.suffix.lower() == ".json":
+            data = json.loads(text) or {}
+        else:
+            import yaml  # solo se necesita para YAML
+            data = yaml.safe_load(text) or {}
+    except Exception as exc:  # yaml.YAMLError / json.JSONDecodeError
+        raise ValueError(f"{path}: no es un YAML/JSON válido: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: la configuración debe ser un mapa (global / defaults / endpoints)")
+    return data
 
 
 def load_config(path: str | Path | None = None) -> GateConfig:
