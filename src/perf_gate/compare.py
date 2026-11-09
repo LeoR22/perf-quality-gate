@@ -1,8 +1,10 @@
 """Compara una versión candidata contra la línea base (producción) y emite un veredicto."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum
+from statistics import NormalDist
 
 from .config import GateConfig
 from .stats import EndpointStats, RunStats
@@ -63,14 +65,33 @@ class GateResult:
 
     @property
     def findings(self) -> list[Finding]:
-        out = list(self.global_findings)
+        # Primero los endpoints: el titular debe nombrar el endpoint concreto que falló.
+        out: list[Finding] = []
         for e in self.endpoints:
             out.extend(e.findings)
-        return out
+        return out + list(self.global_findings)
 
 
 def _policy_status(policy: str) -> Status | None:
     return {"fail": Status.FAIL, "warn": Status.WARN, "ignore": None}[policy]
+
+
+def error_increase_is_significant(b_errors: int, b_n: int, c_errors: int, c_n: int,
+                                  confidence_pct: float) -> bool:
+    """Prueba z de dos proporciones (una cola): ¿la tasa de error de la versión nueva es mayor que la
+    de producción más allá del azar? Evita bloquear por 2 o 3 errores sueltos en pocas peticiones.
+    confidence_pct = 0 desactiva la prueba (cualquier aumento cuenta)."""
+    if confidence_pct <= 0:
+        return True
+    if not b_n or not c_n:
+        return False
+    p_b, p_c = b_errors / b_n, c_errors / c_n
+    pooled = (b_errors + c_errors) / (b_n + c_n)
+    se = math.sqrt(pooled * (1 - pooled) * (1 / b_n + 1 / c_n))
+    if se == 0:
+        return p_c > p_b
+    z = (p_c - p_b) / se
+    return z >= NormalDist().inv_cdf(confidence_pct / 100)
 
 
 def _latency_hint(label: str, b: EndpointStats, c: EndpointStats) -> str:
@@ -153,12 +174,18 @@ def _compare_endpoint(label: str, b: EndpointStats | None, c: EndpointStats | No
         add(Status.FAIL, f"p{p} de {cand_p:.0f} ms supera el SLA absoluto de {r.max_ms:.0f} ms.",
             _latency_hint(label, b, c) if b else f"Perfilar {label} bajo carga.")
 
-    if c.error_rate_pct > r.max_error_rate_pct or (
-        b is not None and c.error_rate_pct - b.error_rate_pct > r.max_error_rate_increase_pp
-    ):
+    above_sla = c.error_rate_pct > r.max_error_rate_pct
+    worse_than_prod = (
+        b is not None
+        and c.error_rate_pct - b.error_rate_pct > r.max_error_rate_increase_pp
+        and error_increase_is_significant(b.errors, b.count, c.errors, c.count, r.error_confidence_pct)
+    )
+    if above_sla or worse_than_prod:
         base_txt = f" vs {b.error_rate_pct:.2f}% en producción" if b else ""
+        signif = (f", aumento significativo al {r.error_confidence_pct:.0f}%"
+                  if worse_than_prod and r.error_confidence_pct > 0 else "")
         add(Status.FAIL,
-            f"Tasa de error {c.error_rate_pct:.2f}% ({c.errors} de {c.count}){base_txt}; "
+            f"Tasa de error {c.error_rate_pct:.2f}% ({c.errors} de {c.count}){base_txt}{signif}; "
             f"límite {r.max_error_rate_pct:.2f}% y +{r.max_error_rate_increase_pp:.2f} pp.",
             f"Revisar en los logs los errores (HTTP 5xx) de {label}: bajo carga suelen indicar timeouts, "
             "pools agotados o excepciones no controladas.")

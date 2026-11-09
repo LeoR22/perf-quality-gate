@@ -28,7 +28,8 @@ class EndpointRules:
     min_increase_ms: float = 15           # ignora "regresiones" menores (ruido)
     max_ms: float | None = None           # SLA absoluto opcional (para el percentil)
     max_error_rate_pct: float = 1.0       # tasa de error absoluta máxima
-    max_error_rate_increase_pp: float = 0.5   # puntos porcentuales sobre producción
+    max_error_rate_increase_pp: float = 0.5   # puntos porcentuales sobre producción...
+    error_confidence_pct: float = 99      # ...y solo si el aumento es estadísticamente significativo (0 = sin prueba)
     min_samples: int = 30                 # por debajo no es estadísticamente confiable
     ignore: bool = False
 
