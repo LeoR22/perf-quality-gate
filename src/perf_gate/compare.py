@@ -77,22 +77,69 @@ def _policy_status(policy: str) -> Status | None:
     return {"fail": Status.FAIL, "warn": Status.WARN, "info": None, "ignore": None}[policy]
 
 
-def error_increase_is_significant(b_errors: int, b_n: int, c_errors: int, c_n: int,
-                                  confidence_pct: float) -> bool:
-    """Prueba z de dos proporciones (una cola): ¿la tasa de error de la versión nueva es mayor que la
-    de producción más allá del azar? Evita bloquear por 2 o 3 errores sueltos en pocas peticiones.
-    confidence_pct = 0 desactiva la prueba (cualquier aumento cuenta)."""
-    if confidence_pct <= 0:
-        return True
-    if not b_n or not c_n:
-        return False
-    p_b, p_c = b_errors / b_n, c_errors / c_n
+@dataclass(frozen=True)
+class ErrorTest:
+    """Resultado de comparar la tasa de error de la versión nueva contra producción.
+
+    H0: la tasa de error de la versión nueva es <= la de producción. H1: es mayor (una cola).
+    alpha = 1 - confidence. Supone peticiones independientes; indica asociación, no causa."""
+    significant: bool
+    method: str
+    p_value: float | None
+
+    def describe(self, confidence_pct: float) -> str:
+        if self.p_value is None:
+            return self.method
+        p = "p<0.0001" if self.p_value < 0.0001 else f"p={self.p_value:.4f}"
+        return f"{self.method}, {p} vs alfa={1 - confidence_pct / 100:.2f}"
+
+
+def _log_comb(n: int, k: int) -> float:
+    return math.lgamma(n + 1) - math.lgamma(k + 1) - math.lgamma(n - k + 1)
+
+
+def fisher_one_sided_p(b_errors: int, b_n: int, c_errors: int, c_n: int) -> float:
+    """Prueba exacta de Fisher, una cola: P(X >= c_errors) con X ~ Hipergeométrica, es decir, la
+    probabilidad de ver al menos esos errores en la versión nueva si ambas tuvieran la misma tasa."""
+    total, errors = b_n + c_n, b_errors + c_errors
+    denom = _log_comb(total, c_n)
+    hi = min(errors, c_n)
+    p = sum(math.exp(_log_comb(errors, x) + _log_comb(total - errors, c_n - x) - denom)
+            for x in range(c_errors, hi + 1) if c_n - x <= total - errors)
+    return min(1.0, p)
+
+
+def z_one_sided_p(b_errors: int, b_n: int, c_errors: int, c_n: int) -> float:
+    """Prueba z de dos proporciones (aproximación normal), una cola."""
     pooled = (b_errors + c_errors) / (b_n + c_n)
     se = math.sqrt(pooled * (1 - pooled) * (1 / b_n + 1 / c_n))
     if se == 0:
-        return p_c > p_b
-    z = (p_c - p_b) / se
-    return z >= NormalDist().inv_cdf(confidence_pct / 100)
+        return 1.0
+    z = (c_errors / c_n - b_errors / b_n) / se
+    return 1 - NormalDist().cdf(z)
+
+
+def error_increase_test(b_errors: int, b_n: int, c_errors: int, c_n: int, confidence_pct: float) -> ErrorTest:
+    """Elige el método según los datos: la aproximación normal no es confiable con conteos bajos, así que
+    si alguna frecuencia esperada de la tabla 2x2 es < 5 se usa la prueba exacta de Fisher."""
+    if confidence_pct <= 0:
+        return ErrorTest(True, "sin prueba estadística (error_confidence_pct: 0)", None)
+    if not b_n or not c_n:
+        return ErrorTest(False, "sin muestras", None)
+    if c_errors / c_n <= b_errors / b_n:
+        return ErrorTest(False, "la tasa no aumentó", 1.0)
+    total, errors = b_n + c_n, b_errors + c_errors
+    expected = min(errors * b_n, errors * c_n, (total - errors) * b_n, (total - errors) * c_n) / total
+    if expected < 5:
+        method, p = "prueba exacta de Fisher", fisher_one_sided_p(b_errors, b_n, c_errors, c_n)
+    else:
+        method, p = "prueba z de dos proporciones", z_one_sided_p(b_errors, b_n, c_errors, c_n)
+    return ErrorTest(p <= 1 - confidence_pct / 100, method, p)
+
+
+def error_increase_is_significant(b_errors: int, b_n: int, c_errors: int, c_n: int,
+                                  confidence_pct: float) -> bool:
+    return error_increase_test(b_errors, b_n, c_errors, c_n, confidence_pct).significant
 
 
 def _latency_hint(label: str, b: EndpointStats, c: EndpointStats) -> str:
@@ -175,21 +222,30 @@ def _compare_endpoint(label: str, b: EndpointStats | None, c: EndpointStats | No
         add(Status.FAIL, f"p{p} de {cand_p:.0f} ms supera el SLA absoluto de {r.max_ms:.0f} ms.",
             _latency_hint(label, b, c) if b else f"Perfilar {label} bajo carga.")
 
+    # Dos reglas independientes: el límite ABSOLUTO no depende de ninguna prueba estadística,
+    # y el aumento RELATIVO frente a producción exige además evidencia estadística.
     above_sla = c.error_rate_pct > r.max_error_rate_pct
-    worse_than_prod = (
-        b is not None
-        and c.error_rate_pct - b.error_rate_pct > r.max_error_rate_increase_pp
-        and error_increase_is_significant(b.errors, b.count, c.errors, c.count, r.error_confidence_pct)
-    )
+    above_pp = b is not None and c.error_rate_pct - b.error_rate_pct > r.max_error_rate_increase_pp
+    test = error_increase_test(b.errors, b.count, c.errors, c.count, r.error_confidence_pct) if above_pp else None
+    worse_than_prod = bool(test and test.significant)
+    base_txt = f" vs {b.error_rate_pct:.2f}% en producción" if b else ""
+    rec = (f"Revisar en los logs los errores (HTTP 5xx) de {label}: bajo carga suelen indicar timeouts, "
+           "pools agotados o excepciones no controladas.")
     if above_sla or worse_than_prod:
-        base_txt = f" vs {b.error_rate_pct:.2f}% en producción" if b else ""
-        signif = (f", aumento significativo al {r.error_confidence_pct:.0f}%"
-                  if worse_than_prod and r.error_confidence_pct > 0 else "")
+        why = []
+        if above_sla:
+            why.append(f"supera el máximo absoluto de {r.max_error_rate_pct:.2f}%")
+        if worse_than_prod:
+            why.append(f"sube más de {r.max_error_rate_increase_pp:.2f} pp y el aumento es significativo "
+                       f"({test.describe(r.error_confidence_pct)})")
         add(Status.FAIL,
-            f"Tasa de error {c.error_rate_pct:.2f}% ({c.errors} de {c.count}){base_txt}{signif}; "
-            f"límite {r.max_error_rate_pct:.2f}% y +{r.max_error_rate_increase_pp:.2f} pp.",
-            f"Revisar en los logs los errores (HTTP 5xx) de {label}: bajo carga suelen indicar timeouts, "
-            "pools agotados o excepciones no controladas.")
+            f"Tasa de error {c.error_rate_pct:.2f}% ({c.errors} de {c.count}){base_txt}: {' y '.join(why)}.", rec)
+    elif test is not None:  # sube más del umbral, pero puede ser azar: no bloquea, pero no se oculta
+        add(Status.WARN,
+            f"Tasa de error {c.error_rate_pct:.2f}% ({c.errors} de {c.count}){base_txt}: sube más de "
+            f"{r.max_error_rate_increase_pp:.2f} pp, pero no es estadísticamente significativo "
+            f"({test.describe(r.error_confidence_pct)}); no bloquea.",
+            f"Vigilar en la próxima ejecución; si se repite, {rec[0].lower()}{rec[1:]}")
 
     res.status = worst(*(f.status for f in res.findings)) if res.findings else Status.PASS
     return res

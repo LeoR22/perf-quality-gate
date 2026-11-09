@@ -184,8 +184,47 @@ def test_error_confidence_is_configurable(tmp_path):
     b, c = r_default.endpoints[0].baseline, r_default.endpoints[0].candidate
     assert 0.5 < c.error_rate_pct < 5, c.error_rate_pct
     assert r_strict.status == Status.FAIL                       # sin prueba: cualquier +0,5 pp bloquea
-    expected = Status.FAIL if sig(b.errors, b.count, c.errors, c.count, 99) else Status.PASS
-    assert r_default.status == expected                         # con prueba: decide la evidencia
+    expected = Status.FAIL if sig(b.errors, b.count, c.errors, c.count, 99) else Status.WARN
+    assert r_default.status == expected     # con prueba: decide la evidencia; sin evidencia queda visible (WARN)
+
+
+def test_fisher_matches_known_value():
+    from perf_gate.compare import fisher_one_sided_p
+    # 0/10 vs 5/10: P = C(10,5)/C(20,5) = 252/15504
+    assert abs(fisher_one_sided_p(0, 10, 5, 10) - 252 / 15504) < 1e-9
+
+
+@pytest.mark.parametrize("counts,method,significant", [
+    ((0, 420, 3, 415), "Fisher", False),            # pocos errores: exacta, y es azar
+    ((0, 1652, 4, 1258), "Fisher", False),
+    ((0, 50, 8, 50), "Fisher", True),               # pocos, pero contundente
+    ((4, 1573, 39, 1170), "prueba z", True),        # versión A del kit: muestra grande
+    ((0, 1000, 0, 1000), "no aumentó", False),      # cero errores en ambas
+    ((5, 1000, 5, 1000), "no aumentó", False),
+])
+def test_error_test_picks_method_by_sample_size(counts, method, significant):
+    from perf_gate.compare import error_increase_test
+    r = error_increase_test(*counts, 99)
+    assert method in r.method and r.significant is significant
+
+
+def test_absolute_error_limit_does_not_depend_on_significance(tmp_path):
+    """Una versión no aprueba solo porque la diferencia con producción no sea significativa."""
+    base = write_csv(tmp_path / "b.csv", {"GET /a": (100, 2.5)}, seconds=20)
+    cand = write_csv(tmp_path / "c.csv", {"GET /a": (100, 2.5)}, seconds=20, seed=3)
+    cfg = tmp_path / "cfg.yml"
+    cfg.write_text("global:\n  warmup_seconds: 0\n", encoding="utf-8")  # máximo absoluto por defecto: 1 %
+    r = run(base, cand, cfg)
+    assert r.status == Status.FAIL
+    assert "supera el máximo absoluto" in r.endpoints[0].findings[0].message
+
+
+def test_error_finding_states_the_method(tmp_path):
+    from perf_gate.cli import main as cli
+    cli(["--baseline", str(DATA / "produccion-actual.csv"), "--candidate", str(DATA / "version-a.csv"),
+         "--report-dir", str(tmp_path)])
+    md = (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert "prueba z de dos proporciones, p<0.0001" in md
 
 
 def test_small_noise_below_min_increase_ms_is_ignored(tmp_path):
