@@ -12,6 +12,7 @@ dependencies = ["PyYAML>=6.0"]
 
 [project.scripts]
 perf-gate = "perf_gate.cli:main"
+perf-gate-ai = "perf_gate.ai_summary:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
