@@ -25,7 +25,7 @@ jobs:
       matrix:
         version: ${{ fromJSON((inputs.version == '' || inputs.version == 'todas') && '["version-a","version-b"]' || format('["{0}"]', inputs.version)) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Performance Quality Gate
         id: gate
