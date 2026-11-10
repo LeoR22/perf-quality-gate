@@ -1,0 +1,32 @@
+==============================================================================
+⚠️  PERFORMANCE QUALITY GATE — WARN
+La versión 'version-b' PASA con 2 advertencia(s): no es más lenta que producción, pero revisa las advertencias.
+==============================================================================
+Endpoint                             p  Prod ms  Nueva ms  Cambio       Err %  Estado
+Consultar saldo, cuenta ahorros     95      206       207     +0%     0.4→0.3  PASS
+GET /clientes                       95      162       162     +0%     0.0→0.1  PASS
+GET /reportes                       90      818      2242   +174%     0.0→0.0  WARN
+POST /pagos                         95      353       353     +0%     0.3→0.1  PASS
+POST /transferencias                95        —       265       —        →0.5  PASS
+
+Throughput (estado estable): 20.3 → 20.2 req/s
+
+Arranque (excluido de la comparación por endpoint; política: warn):
+  Ventana excluida                   60 s (1214 peticiones) → 60 s (1214 peticiones)
+  Tiempo hasta estabilizarse                           20 s → 50 s
+  p95 durante el calentamiento                       659 ms → 1166 ms
+  Errores durante el calentamiento                    0.58% → 0.49%
+
+Por qué y qué mejorar:
+  WARN [GET /reportes] Solo 3 muestras (mínimo 30); el resultado no es estadísticamente confiable y no se usa para decidir (p90 actual 2242 ms, máx 2600 ms).
+       → Aumentar las peticiones de GET /reportes en el plan de carga para poder evaluarlo.
+  WARN [arranque] Degradación de arranque: tarda 50s en estabilizarse vs 20s en producción (+30s; límite +20s); p95 durante el calentamiento de 1166 ms vs 659 ms (+77%; límite +50%). Ese periodo no entra en la comparación por endpoint, pero los usuarios lo sufren en cada despliegue.
+       → Revisar el arranque en frío: precalentar cachés, pools de conexiones y JIT. En producción afecta cada despliegue y cada nueva instancia que levante el autoescalado. Si el servicio escala seguido o tiene SLA estricto de disponibilidad, usar stabilization_policy: fail.
+
+Calidad de datos:
+  - [producción] Separador ';' detectado (no ','); se leyó igual.
+  - [producción] 1 línea(s) con timestamp fuera de orden; se ordenaron por tiempo antes de analizar (la ventana de calentamiento se calcula por timestamp, no por posición).
+  - [versión candidata] 1 línea(s) con timestamp fuera de orden; se ordenaron por tiempo antes de analizar (la ventana de calentamiento se calcula por timestamp, no por posición).
+
+Reportes en reporte-b: report.html, report.md y report.json
+exit B = 0

@@ -1,0 +1,37 @@
+==============================================================================
+❌  PERFORMANCE QUALITY GATE — FAIL
+La versión 'version-a' NO PASA: POST /pagos — p95 de 767 ms vs 353 ms en producción (+117%, 2.2x); límite +10%. (y 2 problema(s) más)
+==============================================================================
+Endpoint                             p  Prod ms  Nueva ms  Cambio       Err %  Estado
+Consultar saldo, cuenta ahorros     95      206       206     +0%     0.4→0.3  PASS
+GET /clientes                       95      162       162     +0%     0.0→0.2  PASS
+GET /reportes                       90      818       813     -1%     0.0→0.0  WARN
+POST /pagos                         95      353       767   +117%     0.3→3.3  FAIL
+POST /transferencias                95        —       266       —        →0.2  PASS
+
+Throughput (estado estable): 20.3 → 20.1 req/s
+
+Arranque (excluido de la comparación por endpoint; política: warn):
+  Ventana excluida                   60 s (1214 peticiones) → 60 s (1219 peticiones)
+  Tiempo hasta estabilizarse                           20 s → 20 s
+  p95 durante el calentamiento                       659 ms → 1343 ms
+  Errores durante el calentamiento                    0.58% → 0.57%
+
+Por qué y qué mejorar:
+  FAIL [POST /pagos] p95 de 767 ms vs 353 ms en producción (+117%, 2.2x); límite +10%.
+       → Optimizar POST /pagos: el tiempo al primer byte también subió (239 → 518 ms), así que la demora está en el procesamiento del servidor: perfilar el endpoint, revisar consultas a base de datos, llamadas a servicios externos, locks y pools de conexiones.
+  FAIL [POST /pagos] p95 de 767 ms supera el SLA absoluto de 600 ms.
+  FAIL [POST /pagos] Tasa de error 3.33% (39 de 1170) vs 0.25% en producción: supera el máximo absoluto de 1.00% y sube más de 0.50 pp y el aumento es significativo (prueba z de dos proporciones, p<0.0001 vs alfa=0.01).
+       → Revisar en los logs los errores (HTTP 5xx) de POST /pagos: bajo carga suelen indicar timeouts, pools agotados o excepciones no controladas.
+  WARN [GET /reportes] Solo 3 muestras (mínimo 30); el resultado no es estadísticamente confiable y no se usa para decidir (p90 actual 813 ms, máx 815 ms).
+       → Aumentar las peticiones de GET /reportes en el plan de carga para poder evaluarlo.
+  WARN [arranque] Degradación de arranque: p95 durante el calentamiento de 1343 ms vs 659 ms (+104%; límite +50%). Ese periodo no entra en la comparación por endpoint, pero los usuarios lo sufren en cada despliegue.
+       → Revisar el arranque en frío: precalentar cachés, pools de conexiones y JIT. En producción afecta cada despliegue y cada nueva instancia que levante el autoescalado. Si el servicio escala seguido o tiene SLA estricto de disponibilidad, usar stabilization_policy: fail.
+
+Calidad de datos:
+  - [producción] Separador ';' detectado (no ','); se leyó igual.
+  - [producción] 1 línea(s) con timestamp fuera de orden; se ordenaron por tiempo antes de analizar (la ventana de calentamiento se calcula por timestamp, no por posición).
+  - [versión candidata] 1 línea(s) con timestamp fuera de orden; se ordenaron por tiempo antes de analizar (la ventana de calentamiento se calcula por timestamp, no por posición).
+
+Reportes en reporte-a: report.html, report.md y report.json
+exit A = 1

@@ -4,6 +4,9 @@ GitHub Action que compara los resultados de una prueba de carga de una **versió
 **producción**. Dice si la versión **pasa o no**, **por qué** y **qué debería mejorar el equipo**, y deja el
 pipeline **en rojo** cuando no pasa. Cada equipo ajusta sus límites, incluso uno distinto por endpoint.
 
+> 📘 **[Manual paso a paso con capturas](docs/manual/MANUAL.md)**: cómo funciona, cómo leer los resultados,
+> cómo usarla en un pipeline y cómo ejecutarla en tu computador.
+
 | Pipeline | Qué hace |
 |---|---|
 | [`CI - Build & Test`](.github/workflows/ci.yml) | Construye la herramienta: tests (Python 3.10 y 3.12), verificación del README, integración del consumidor y release inmutable `vX.Y.Z` |
