@@ -176,7 +176,7 @@ def to_html(r: GateResult) -> str:
 {tile("Throughput", f"{b.throughput_rps:.1f} req/s", f"{c.throughput_rps:.1f} req/s")}
 {tile("Tasa de error", f"{b.error_rate_pct:.2f}%", f"{c.error_rate_pct:.2f}%")}
 {tile("Tiempo hasta estabilizarse", _fmt(b.stabilization_s, " s"), _fmt(c.stabilization_s, " s"))}
-{tile("Peticiones analizadas", f"{b.steady_samples} de {b.total_samples}", f"{c.steady_samples} de {c.total_samples}")}
+<div class="tile"><div class="k">Peticiones en fase estable</div><div class="v">{c.steady_samples}</div><div class="d">+{c.total_samples - c.steady_samples} del calentamiento, analizadas aparte · producción: {b.steady_samples} + {b.total_samples - b.steady_samples}</div></div>
 </div>
 <h2>Endpoint por endpoint</h2>
 <div class="card">

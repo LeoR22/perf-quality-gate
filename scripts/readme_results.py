@@ -74,7 +74,7 @@ def build() -> str:
     rows = [
         ("Throughput (fase estable)", g(lambda v: f"{v:.1f} req/s", "throughput_rps")),
         ("Tasa de error (fase estable)", g(lambda v: f"{v:.2f}%", "error_rate_pct")),
-        ("Peticiones analizadas / totales",
+        ("Peticiones en fase estable / totales",
          [f"{s.steady_samples} / {s.total_samples}" for s in (prod, *runs.values())]),
         ("Tiempo hasta estabilizarse", g(lambda v: f"{_ms(v)} s", "stabilization_s")),
         ("p95 durante el calentamiento", wu(lambda v: f"{v:.0f} ms", "p95")),

@@ -61,7 +61,7 @@ Límites por defecto de la herramienta (el reto no define SLA). Fase estable (si
 |---|---:|---:|---:|
 | Throughput (fase estable) | 20.3 req/s | 20.1 req/s | 20.2 req/s |
 | Tasa de error (fase estable) | 0.23% | 0.99% | 0.23% |
-| Peticiones analizadas / totales | 4869 / 6083 | 4828 / 6047 | 4845 / 6059 |
+| Peticiones en fase estable / totales | 4869 / 6083 | 4828 / 6047 | 4845 / 6059 |
 | Tiempo hasta estabilizarse | 20 s | 20 s | 50 s |
 | p95 durante el calentamiento | 659 ms | 1343 ms | 1166 ms |
 

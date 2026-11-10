@@ -127,7 +127,7 @@ def to_markdown(r: GateResult, limits: dict[str, float] | None = None) -> str:
         "|---|---:|---:|",
         f"| Throughput (req/s) | {r.baseline.throughput_rps:.1f} | {r.candidate.throughput_rps:.1f} |",
         f"| Tasa de error | {r.baseline.error_rate_pct:.2f}% | {r.candidate.error_rate_pct:.2f}% |",
-        f"| Peticiones analizadas / totales | {r.baseline.steady_samples} / {r.baseline.total_samples} | "
+        f"| Peticiones en fase estable / totales (el resto es calentamiento, analizado aparte) | {r.baseline.steady_samples} / {r.baseline.total_samples} | "
         f"{r.candidate.steady_samples} / {r.candidate.total_samples} |",
         "",
         "### Arranque (calentamiento)",
