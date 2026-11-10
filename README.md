@@ -8,8 +8,8 @@ pipeline **en rojo** cuando no pasa. Cada equipo ajusta sus límites, incluso un
 |---|---|
 | [`CI - Build & Test`](.github/workflows/ci.yml) | Construye la herramienta: tests (Python 3.10 y 3.12), verificación del README, integración del consumidor y release inmutable `vX.Y.Z` |
 | [`Integración del consumidor`](.github/workflows/integration.yml) | Ejecuta la action como un equipo y verifica el contrato: A da FAIL, B pasa y un dato inválido bloquea con error |
-| [`Promover tag mayor`](.github/workflows/promote.yml) | Manual: vuelve a validar una release y solo entonces mueve `v1` |
-| [`Performance Gate - Versiones A y B`](.github/workflows/performance-gate.yml) | Manual: demostración con la action local. La principal está en [perf-gate-demo](https://github.com/LeoR22/perf-gate-demo) |
+| [`Promover tag mayor`](.github/workflows/promote.yml) | **El único paso manual**: vuelve a validar una release y solo entonces mueve `v1` |
+| [`Performance Gate - Versiones A y B`](.github/workflows/performance-gate.yml) | **Automático** en cada push y PR: evalúa A y B con la action de este commit. A en rojo (bloquea) y B en verde |
 
 **Dos repositorios:** este tiene la herramienta. [`perf-gate-demo`](https://github.com/LeoR22/perf-gate-demo)
 es el repo de un equipo que la consume como `LeoR22/perf-quality-gate@v1` y solo despliega si el gate pasa.
