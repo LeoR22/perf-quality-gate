@@ -81,7 +81,6 @@ En cada job, la pestaña **Summary** muestra el reporte visual endpoint por endp
 | Dónde | Versión A | Versión B |
 |---|---|---|
 | Repo del equipo [`perf-gate-demo`](https://github.com/LeoR22/perf-gate-demo) (usa `@v1` = v1.6.0) | [❌ gate en rojo, despliegue bloqueado](https://github.com/LeoR22/perf-gate-demo/actions/runs/42729780645/job/129544585059) | [✅ gate en verde, despliegue ejecutado](https://github.com/LeoR22/perf-gate-demo/actions/runs/42729780645/job/129544585407) |
-| Prueba de carga real con k6 (APIs simuladas) | [❌ k6 version-a](https://github.com/LeoR22/perf-gate-demo/actions/runs/42729780485/job/129544581394) | [✅ k6 version-b](https://github.com/LeoR22/perf-gate-demo/actions/runs/42729780485/job/129544581080) |
 | Build y contrato de la herramienta | [✅ CI + integración del consumidor](https://github.com/LeoR22/perf-quality-gate/actions/runs/42728585540) | [✅ Release v1.6.0](https://github.com/LeoR22/perf-quality-gate/releases/tag/v1.6.0) · [✅ promoción de v1](https://github.com/LeoR22/perf-quality-gate/actions/runs/42728987324) |
 
 ---
@@ -356,8 +355,6 @@ k6 run --out json=resultados.json script.js   # o --out csv=resultados.csv
 - **Validado con salida real de k6 2.2.0** ([fixtures](tests/fixtures)). En la prueba aparecieron dos
   detalles: k6 2.x copia `name` en el tag `url` y el CSV trae el tiempo en segundos (se avisa en el reporte).
 - El resumen agregado (`--summary-export`) se rechaza con un error claro: no trae peticiones individuales.
-- La prueba de carga real con k6 corre en GitHub Actions, en
-  [perf-gate-demo](https://github.com/LeoR22/perf-gate-demo#prueba-de-carga-real-con-k6-en-github-actions).
 
 También se instala como paquete: `pip install https://github.com/LeoR22/perf-quality-gate/archive/refs/tags/v1.zip`
 y queda el comando `perf-gate`.

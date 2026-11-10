@@ -16,12 +16,11 @@ Guía paso a paso, con capturas reales, para entender, usar y mostrar la herrami
 5. [El reporte: por qué no pasa y qué mejorar](#5-el-reporte-por-qué-no-pasa-y-qué-mejorar)
 6. [Los límites de cada equipo (perf-gate.yml)](#6-los-límites-de-cada-equipo-perf-gateyml)
 7. [El reporte visual en GitHub Pages](#7-el-reporte-visual-en-github-pages)
-8. [Prueba de carga real con k6](#8-prueba-de-carga-real-con-k6)
-9. [Versiones: el único paso manual](#9-versiones-el-único-paso-manual)
-10. [Ejecutarlo en tu computador](#10-ejecutarlo-en-tu-computador)
-11. [Ejercicio: cambiar una regla y ver el pipeline reaccionar](#11-ejercicio-cambiar-una-regla-y-ver-el-pipeline-reaccionar)
-12. [Cómo leer la tabla de resultados](#12-cómo-leer-la-tabla-de-resultados)
-13. [Problemas comunes](#13-problemas-comunes)
+8. [Versiones: el único paso manual](#8-versiones-el-único-paso-manual)
+9. [Ejecutarlo en tu computador](#9-ejecutarlo-en-tu-computador)
+10. [Ejercicio: cambiar una regla y ver el pipeline reaccionar](#10-ejercicio-cambiar-una-regla-y-ver-el-pipeline-reaccionar)
+11. [Cómo leer la tabla de resultados](#11-cómo-leer-la-tabla-de-resultados)
+12. [Problemas comunes](#12-problemas-comunes)
 
 ---
 
@@ -47,7 +46,7 @@ Hay **dos repositorios**, como en la vida real:
 push o PR ──► tests + integración + gate de A y B        (automático)
 tag v1.x.y ──► release inmutable                          (automático)
 "Promover tag mayor" ──► mueve v1 a la versión nueva      (MANUAL)
-perf-gate-demo usa @v1 ──► gate A/B + k6 + reporte + issue (automático)
+perf-gate-demo usa @v1 ──► gate A/B + reporte + issue (automático)
 ```
 
 ---
@@ -81,7 +80,7 @@ Entra a la pestaña **Actions**. A la izquierda están los 4 workflows:
 | **CI - Build & Test** | Solo, en cada push y PR | Tests, verificación del README e integración del consumidor. Con un tag nuevo, publica la release |
 | **Integración del consumidor** | Lo llama el CI | Usa la action como un equipo real y comprueba tres cosas: **A da FAIL, B pasa y un dato inválido bloquea** |
 | **Performance Gate - Versiones A y B** | Solo, en cada push y PR | Evalúa A y B con la action de ese mismo commit |
-| **Promover tag mayor** | **Manual** | El único paso manual (sección 9) |
+| **Promover tag mayor** | **Manual** | El único paso manual (sección 8) |
 
 ### El CI (verde = la herramienta está sana)
 
@@ -193,20 +192,7 @@ Más abajo, el **detalle** y el **arranque (calentamiento)**:
 
 ---
 
-## 8. Prueba de carga real con k6
-
-Además de los datos del reto, el equipo tiene un workflow que **genera carga real con k6** contra APIs
-simuladas que imitan a producción, A y B:
-
-![Prueba de carga real con k6](img/10-k6-carga-real.jpg)
-
-- **k6 version-a** ❌ y **k6 version-b** ✅: la herramienta llega a la misma conclusión con datos frescos.
-- Las cifras **varían en cada corrida** y son ilustrativas: las APIs son simuladas. El **veredicto oficial**
-  sale de los datos JMeter del reto.
-
----
-
-## 9. Versiones: el único paso manual
+## 8. Versiones: el único paso manual
 
 Cada versión publicada es **inmutable**:
 
@@ -227,7 +213,7 @@ Los equipos usan `@v1`, que apunta a la última versión **promovida**. Para mov
 
 ---
 
-## 10. Ejecutarlo en tu computador
+## 9. Ejecutarlo en tu computador
 
 Todo corre **en tu PC**: no se conecta a GitHub ni dispara ningún pipeline. Abre **PowerShell**:
 
@@ -302,7 +288,7 @@ deactivate
 
 ---
 
-## 11. Ejercicio: cambiar una regla y ver el pipeline reaccionar
+## 10. Ejercicio: cambiar una regla y ver el pipeline reaccionar
 
 Demuestra el flujo automático completo (requiere sesión en GitHub):
 
@@ -317,7 +303,7 @@ Demuestra el flujo automático completo (requiere sesión en GitHub):
 
 ---
 
-## 12. Cómo leer la tabla de resultados
+## 11. Cómo leer la tabla de resultados
 
 Ejemplo: `❌ p95 767 (+117%) · 3.33% · n=1170` (pagos, versión A)
 
@@ -335,13 +321,12 @@ Ejemplo: `❌ p95 767 (+117%) · 3.33% · n=1170` (pagos, versión A)
 
 ---
 
-## 13. Problemas comunes
+## 12. Problemas comunes
 
 | Situación | Explicación |
 |---|---|
 | Toda la ejecución sale en rojo | Es correcto: la versión A no pasa. Abre la ejecución: B está en verde |
 | No veo el "Summary" del job | GitHub lo muestra solo con la sesión iniciada. El mismo reporte está en el issue y en Pages |
-| `perf-gate.exe` bloqueado en Windows | Usa `python -m perf_gate` (sección 10) |
+| `perf-gate.exe` bloqueado en Windows | Usa `python -m perf_gate` (sección 9) |
 | Errores en "Annotations" del CI aunque esté en verde | Son los casos de prueba intencionales de la integración (sección 3) |
-| El workflow de k6 dio un resultado distinto | Es carga real con datos nuevos: las cifras varían. El veredicto oficial sale de los datos del reto |
 | Hice un cambio local y no pasó nada en GitHub | Lo local no se conecta a GitHub. Solo un `git push` dispara los pipelines |
