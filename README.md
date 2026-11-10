@@ -19,6 +19,27 @@ es el repo de un equipo que la consume como `LeoR22/perf-quality-gate@v1` y solo
 
 ---
 
+## Decisiones y por qué
+
+El reto no define SLA ni SLO: los límites por defecto los elegí yo, y cada equipo puede ajustarlos, incluso
+por endpoint ([`perf-gate.yml`](perf-gate.yml)). Estas son las decisiones principales:
+
+| Decisión | Qué elegí | Por qué |
+|---|---|---|
+| Métrica de tiempo | **p95** por endpoint | Refleja al 5 % de usuarios más lentos; el promedio los esconde |
+| Tolerancia frente a producción | **+20 %**, con un mínimo de **15 ms** | Absorbe la variación normal entre corridas sin dejar pasar regresiones reales; en endpoints muy rápidos, unos pocos ms son ruido |
+| Errores | Máximo **1 %** absoluto, y un aumento frente a producción solo bloquea si es **estadísticamente significativo** | Ninguna versión aprueba con errores altos, pero tampoco se bloquea por 2 o 3 errores al azar |
+| Calentamiento | Se excluyen los primeros **60 s** de la comparación, se miden aparte y su degradación es **advertencia** (configurable a bloqueo) | Si se mezcla, B parece 3 veces peor sin serlo. No sé si el servicio usa autoescalado: si lo usa, se configura `stabilization_policy: fail` |
+| `GET /reportes` (4 peticiones) | Advertencia; **no decide** | Con 3 muestras en la fase estable no hay evidencia suficiente para afirmar que mejoró o empeoró |
+| `POST /transferencias` (endpoint nuevo) | Advertencia; se valida solo contra límites absolutos | No existe en producción, así que no hay con qué compararlo |
+| Datos inválidos | **Se detiene** con exit 2 e indica línea y columna | Nunca decidir con datos corruptos |
+| Throughput | Máximo **−15 %** a nivel global | Con los mismos usuarios, atender menos peticiones indica un cuello de botella |
+
+El veredicto oficial de abajo usa **estos límites por defecto**. El `perf-gate.yml` del repo (pagos +10 % y SLA
+de 600 ms) es un **ejemplo** de cómo un equipo ajusta límites por endpoint, no un requisito del reto.
+
+---
+
 ## ¿Cuál versión reemplaza a producción?
 
 ### ✅ La versión **B** reemplaza a producción. La versión **A** no pasa.
@@ -26,15 +47,15 @@ es el repo de un equipo que la consume como `LeoR22/perf-quality-gate@v1` y solo
 <!-- resultados:inicio -->
 <!-- Generado por scripts/readme_results.py: no editar a mano. -->
 
-Fase estable (sin los primeros 60 s). Formato de cada celda: percentil en ms (cambio frente a producción) · tasa de error · muestras.
+Límites por defecto de la herramienta (el reto no define SLA). Fase estable (sin los primeros 60 s). Formato de cada celda: percentil en ms (cambio frente a producción) · tasa de error · muestras.
 
 | Endpoint | Producción | Versión A | Versión B |
 |---|---|---|---|
 | `Consultar saldo, cuenta ahorros` | p95 206 · 0.43% · n=1641 | ✅ p95 206 (+0%) · 0.25% · n=1196 | ✅ p95 207 (+0%) · 0.25% · n=1196 |
 | `GET /clientes` | p95 162 · 0.00% · n=1652 | ✅ p95 162 (+0%) · 0.24% · n=1258 | ✅ p95 162 (+0%) · 0.08% · n=1178 |
-| `GET /reportes` | p90 818 · 0.00% · n=3 | ⚠️ p90 813 (-1%) · 0.00% · n=3 | ⚠️ p90 2242 (+174%) · 0.00% · n=3 |
+| `GET /reportes` | p95 819 · 0.00% · n=3 | ⚠️ p95 814 (-1%) · 0.00% · n=3 | ⚠️ p95 2421 (+196%) · 0.00% · n=3 |
 | `POST /pagos` | p95 353 · 0.25% · n=1573 | ❌ p95 767 (+117%) · 3.33% · n=1170 | ✅ p95 353 (+0%) · 0.08% · n=1257 |
-| `POST /transferencias` | — (no existe) | ✅ p95 266 (sin línea base) · 0.25% · n=1201 | ✅ p95 265 (sin línea base) · 0.50% · n=1211 |
+| `POST /transferencias` | — (no existe) | ⚠️ p95 266 (sin línea base) · 0.25% · n=1201 | ⚠️ p95 265 (sin línea base) · 0.50% · n=1211 |
 
 | Global | Producción | Versión A | Versión B |
 |---|---:|---:|---:|
@@ -46,12 +67,19 @@ Fase estable (sin los primeros 60 s). Formato de cada celda: percentil en ms (ca
 
 **Veredicto de la herramienta:**
 
-- `version-a` → **FAIL** (exit 1): POST /pagos — p95 de 767 ms vs 353 ms en producción (+117%, 2.2x); límite +10%. (y 2 problema(s) más)
+- `version-a` → **FAIL** (exit 1): POST /pagos — p95 de 767 ms vs 353 ms en producción (+117%, 2.2x); límite +20%. (y 1 problema(s) más)
 - `version-b` → **WARN** (exit 0): no es más lenta que producción, pero revisa las advertencias.
 
 Sin excluir el calentamiento, `Consultar saldo, cuenta ahorros` en B tendría p90 de 582 ms contra 207 ms en producción: B *parecería* peor por su arranque.
 
-Fuente: `examples/resultados/*.csv` con `perf-gate.yml`. Para reproducirlo: `python scripts/readme_results.py`.
+**Escenarios sintéticos** (no son del reto: se generan desde producción con `scripts/generar_escenarios.py` para demostrar las reglas con más casos):
+
+| Escenario | Qué cambia frente a producción | Veredicto |
+|---|---|---|
+| `sintetica-pasa` | Todos los endpoints +5 % de latencia | ⚠️ **WARN** (exit 0): no es más lenta que producción, pero revisa las advertencias. |
+| `sintetica-falla` | `GET /clientes` +35 % de latencia y errores en `Consultar saldo` (≈2 %) | ❌ **FAIL** (exit 1): Consultar saldo, cuenta ahorros — Tasa de error 2.07% (34 de 1641) vs 0.43% en producción: supera el máximo absoluto de 1.00% y sube más de 0.50 pp y el aumento es significativo (prueba z de dos proporciones, p<0.0001 vs alfa=0.01). (y 1 problema(s) más) |
+
+Fuente: `examples/resultados/*.csv` y `examples/escenarios-sinteticos/*.csv`, con los límites por defecto. Para reproducirlo: `python scripts/readme_results.py`.
 <!-- resultados:fin -->
 
 **Versión A: NO PASA.** `POST /pagos` tarda más del doble que en producción y su tasa de error sube de
@@ -283,7 +311,7 @@ rechazan con exit 2, para que un error de tipeo no desactive un límite sin que 
 | 2 | La etiqueta `"Consultar saldo, cuenta ahorros"` tiene una coma adentro (entre comillas) | Se usa un parser CSV real que respeta comillas, no `split(',')` |
 | 3 | **Calentamiento:** el primer minuto es más lento en las tres pruebas. Producción y A se estabilizan en unos 20 s; B en unos 50 s | Se excluyen los primeros `warmup_seconds`, se mide el tiempo hasta estabilizarse y se advierte si empeora |
 | 4 | `GET /reportes` tiene solo 4 peticiones por prueba (1 dentro del calentamiento y 3 en la fase estable), todas al final del archivo y con el timestamp fuera de orden (parecen agregadas después) | Se ordena por timestamp. Con menos de `min_samples` muestras el endpoint no decide el resultado: se advierte |
-| 5 | `POST /transferencias` no existe en producción | No tiene línea base: se valida contra límites absolutos (error, `max_ms`) y se advierte si no tiene SLA |
+| 5 | `POST /transferencias` no existe en producción | No tiene línea base: se valida contra límites absolutos (error y, si el equipo lo define, `max_ms`) y se advierte que no tiene con qué compararse |
 | 6 | A y B reparten la carga entre 5 endpoints y producción entre 4, por eso cada endpoint tiene menos peticiones | El throughput se compara a nivel global, no por endpoint |
 | 7 | Duración real de 300 s, 50 hilos, `allThreads = 50` constante, sin duplicados ni valores negativos | Revisado: sin acciones. Las líneas inválidas se descartarían y se contarían en el reporte |
 

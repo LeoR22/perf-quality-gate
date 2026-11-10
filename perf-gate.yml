@@ -1,4 +1,5 @@
-# Configuración del Performance Quality Gate para ESTE equipo.
+# EJEMPLO de configuración de un equipo. El reto no define SLA: los valores por endpoint de abajo
+# (pagos +10 %, SLA de 600 ms) ilustran cómo un equipo ajusta sus límites, no son requisitos.
 # Todo es opcional: lo que no se defina toma el valor por defecto (ver README).
 
 global:

@@ -21,7 +21,7 @@ from perf_gate.readers import load_results  # noqa: E402
 from perf_gate.stats import compute_run_stats  # noqa: E402
 
 DATA = ROOT / "examples" / "resultados"
-CONFIG = ROOT / "perf-gate.yml"
+SINT = ROOT / "examples" / "escenarios-sinteticos"
 README = ROOT / "README.md"
 START, END = "<!-- resultados:inicio -->", "<!-- resultados:fin -->"
 ICON = {Status.PASS: "✅", Status.WARN: "⚠️", Status.FAIL: "❌", Status.SKIP: "⏭️"}
@@ -32,7 +32,8 @@ def _ms(v):
 
 
 def build() -> str:
-    cfg = load_config(CONFIG)
+    # Veredicto oficial con los límites POR DEFECTO de la herramienta: el reto no define SLA.
+    cfg = load_config(None)
     w = cfg.global_rules.warmup_seconds
     prod = compute_run_stats(load_results(DATA / "produccion-actual.csv"), w)
     runs = {v: compute_run_stats(load_results(DATA / f"{v}.csv"), w) for v in ("version-a", "version-b")}
@@ -43,7 +44,8 @@ def build() -> str:
         START,
         "<!-- Generado por scripts/readme_results.py: no editar a mano. -->",
         "",
-        f"Fase estable (sin los primeros {w:.0f} s). Formato de cada celda: percentil en ms "
+        f"Límites por defecto de la herramienta (el reto no define SLA). Fase estable (sin los primeros "
+        f"{w:.0f} s). Formato de cada celda: percentil en ms "
         "(cambio frente a producción) · tasa de error · muestras.",
         "",
         "| Endpoint | Producción | Versión A | Versión B |",
@@ -93,11 +95,31 @@ def build() -> str:
         f"Sin excluir el calentamiento, `{saldo}` en B tendría p90 de {full_b.endpoints[saldo].p90:.0f} ms "
         f"contra {full_prod.endpoints[saldo].p90:.0f} ms en producción: B *parecería* peor por su arranque.",
         "",
-        f"Fuente: `examples/resultados/*.csv` con `perf-gate.yml`. Para reproducirlo: "
-        "`python scripts/readme_results.py`.",
+        "**Escenarios sintéticos** (no son del reto: se generan desde producción con "
+        "`scripts/generar_escenarios.py` para demostrar las reglas con más casos):",
+        "",
+        "| Escenario | Qué cambia frente a producción | Veredicto |",
+        "|---|---|---|",
+        *_escenarios(prod, cfg, w),
+        "",
+        "Fuente: `examples/resultados/*.csv` y `examples/escenarios-sinteticos/*.csv`, con los límites por defecto. "
+        "Para reproducirlo: `python scripts/readme_results.py`.",
         END,
     ]
     return "\n".join(out)
+
+
+def _escenarios(prod, cfg, w) -> list[str]:
+    cambios = {
+        "sintetica-pasa": "Todos los endpoints +5 % de latencia",
+        "sintetica-falla": "`GET /clientes` +35 % de latencia y errores en `Consultar saldo` (≈2 %)",
+    }
+    filas = []
+    for nombre, cambio in cambios.items():
+        r = evaluate(prod, compute_run_stats(load_results(SINT / f"{nombre}.csv"), w), cfg, nombre)
+        filas.append(f"| `{nombre}` | {cambio} | {ICON[r.status]} **{r.status.value}** (exit {r.exit_code}): "
+                     f"{_headline(r)} |")
+    return filas
 
 
 def _headline(r) -> str:
