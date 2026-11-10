@@ -303,7 +303,7 @@ deactivate
 Copia tu archivo a la carpeta y cámbialo en `--candidate`:
 ```powershell
 python -m perf_gate --baseline examples/resultados/produccion-actual.csv --candidate mi-version.csv --config perf-gate.yml --name mi-version --report-dir reporte-mi-version
-start reporte-mi-versioneport.html
+start reporte-mi-version\report.html
 ```
 
 Se puede comparar cualquier archivo contra cualquier otro (`--baseline` es la referencia):
