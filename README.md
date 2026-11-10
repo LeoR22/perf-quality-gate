@@ -78,6 +78,8 @@ Sin excluir el calentamiento, `Consultar saldo, cuenta ahorros` en B tendría p9
 |---|---|---|
 | `sintetica-pasa` | Todos los endpoints +5 % de latencia | ⚠️ **WARN** (exit 0): no es más lenta que producción, pero revisa las advertencias. |
 | `sintetica-falla` | `GET /clientes` +35 % de latencia y errores en `Consultar saldo` (≈2 %) | ❌ **FAIL** (exit 1): Consultar saldo, cuenta ahorros — Tasa de error 2.07% (34 de 1641) vs 0.43% en producción: supera el máximo absoluto de 1.00% y sube más de 0.50 pp y el aumento es significativo (prueba z de dos proporciones, p<0.0001 vs alfa=0.01). (y 1 problema(s) más) |
+| `version-c` | 10 % más rápida en todos los endpoints y sin errores | ⚠️ **WARN** (exit 0): no es más lenta que producción, pero revisa las advertencias. |
+| `version-d` | Latencia x2 y 5 % de errores en todo, 30 % menos throughput y arranque en frío | ❌ **FAIL** (exit 1): Consultar saldo, cuenta ahorros — p95 de 412 ms vs 206 ms en producción (+100%, 2.0x); límite +20%. (y 6 problema(s) más) |
 
 Fuente: `examples/resultados/*.csv` y `examples/escenarios-sinteticos/*.csv`, con los límites por defecto. Para reproducirlo: `python scripts/readme_results.py`.
 <!-- resultados:fin -->

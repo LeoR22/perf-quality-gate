@@ -113,6 +113,8 @@ def _escenarios(prod, cfg, w) -> list[str]:
     cambios = {
         "sintetica-pasa": "Todos los endpoints +5 % de latencia",
         "sintetica-falla": "`GET /clientes` +35 % de latencia y errores en `Consultar saldo` (≈2 %)",
+        "version-c": "10 % más rápida en todos los endpoints y sin errores",
+        "version-d": "Latencia x2 y 5 % de errores en todo, 30 % menos throughput y arranque en frío",
     }
     filas = []
     for nombre, cambio in cambios.items():
