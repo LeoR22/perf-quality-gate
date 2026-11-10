@@ -165,7 +165,6 @@ corre aunque el gate falle y **nunca cambia su resultado ni rompe el pipeline**:
 |---|---|---|
 | **Defecto automático** (`create-issue`) | Si no pasa, abre el issue `[perf-gate] <versión> no pasa` con el reporte y el link a la ejecución; en las siguientes ejecuciones lo comenta, y lo **cierra solo** cuando la versión pasa | Documenta el defecto en el sistema de tracking sin trabajo manual y sin duplicados. No usa IA |
 | **Resumen con IA** (`ai-summary`) | Un LLM de [Groq](https://console.groq.com) (plan gratuito) redacta una explicación y un plan de mejora priorizado, en el resumen de la ejecución y en el issue | Solo recibe el reporte **agregado** (sin peticiones individuales ni datos de clientes). Si falta la key o la API falla, se omite con un aviso |
-| **Skill para asistentes de IA** ([`.claude/skills/perf-gate`](.claude/skills/perf-gate/SKILL.md)) | Enseña a un asistente (Claude Code u otro) a correr el gate, interpretar `report.json`, diagnosticar con la evidencia, proponer ajustes de límites con justificación y redactar el defecto | La IA trabaja en el flujo del desarrollador, no en el pipeline, y tiene una regla explícita: no relajar límites para que una versión pase |
 
 **Por qué la IA no decide:** un quality gate tiene que ser reproducible y auditable. Un LLM puede responder
 distinto con los mismos datos, depende de un servicio externo y en banca enviarle datos de producción es un
