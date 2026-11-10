@@ -77,9 +77,9 @@ En cada job, la pestaña **Summary** muestra el reporte visual endpoint por endp
 
 | Dónde | Versión A | Versión B |
 |---|---|---|
-| Repo del equipo [`perf-gate-demo`](https://github.com/LeoR22/perf-gate-demo) (usa `@v1`) | [❌ gate en rojo, despliegue bloqueado](https://github.com/LeoR22/perf-gate-demo/actions/runs/42702445734/job/129450405621) | [✅ gate en verde, despliegue ejecutado](https://github.com/LeoR22/perf-gate-demo/actions/runs/42702445734/job/129450406297) |
-| Este repo (usa `./`) | [❌ Gate version-a](https://github.com/LeoR22/perf-quality-gate/actions/runs/42701821223/job/129448200812) | [✅ Gate version-b](https://github.com/LeoR22/perf-quality-gate/actions/runs/42701821223/job/129448200456) |
-| Build de la herramienta | [✅ CI - Build & Test](https://github.com/LeoR22/perf-quality-gate/actions/runs/42701821572) | [✅ Release v1.0.0](https://github.com/LeoR22/perf-quality-gate/releases/tag/v1.0.0) |
+| Repo del equipo [`perf-gate-demo`](https://github.com/LeoR22/perf-gate-demo) (usa `@v1` = v1.5.0) | [❌ gate en rojo, despliegue bloqueado](https://github.com/LeoR22/perf-gate-demo/actions/runs/42726306808/job/129532693543) | [✅ gate en verde, despliegue ejecutado](https://github.com/LeoR22/perf-gate-demo/actions/runs/42726306808/job/129532693245) |
+| Prueba de carga real con k6 (APIs simuladas) | [❌ k6 version-a](https://github.com/LeoR22/perf-gate-demo/actions/runs/42726306801/job/129532694391) | [✅ k6 version-b](https://github.com/LeoR22/perf-gate-demo/actions/runs/42726306801/job/129532693954) |
+| Build y contrato de la herramienta | [✅ CI + integración del consumidor](https://github.com/LeoR22/perf-quality-gate/actions/runs/42722714727) | [✅ Release v1.5.0](https://github.com/LeoR22/perf-quality-gate/releases/tag/v1.5.0) · [✅ promoción de v1](https://github.com/LeoR22/perf-quality-gate/actions/runs/42724195994) |
 
 ---
 
