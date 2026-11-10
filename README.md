@@ -356,8 +356,8 @@ k6 run --out json=resultados.json script.js   # o --out csv=resultados.csv
 - **Validado con salida real de k6 2.2.0** ([fixtures](tests/fixtures)). En la prueba aparecieron dos
   detalles: k6 2.x copia `name` en el tag `url` y el CSV trae el tiempo en segundos (se avisa en el reporte).
 - El resumen agregado (`--summary-export`) se rechaza con un error claro: no trae peticiones individuales.
-- La demo completa con Docker (APIs simuladas, k6 y gate) está en
-  [perf-gate-demo](https://github.com/LeoR22/perf-gate-demo#demo-local-con-docker-k6).
+- La prueba de carga real con k6 corre en GitHub Actions, en
+  [perf-gate-demo](https://github.com/LeoR22/perf-gate-demo#prueba-de-carga-real-con-k6-en-github-actions).
 
 También se instala como paquete: `pip install https://github.com/LeoR22/perf-quality-gate/archive/refs/tags/v1.zip`
 y queda el comando `perf-gate`.
