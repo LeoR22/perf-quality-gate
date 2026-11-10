@@ -110,8 +110,8 @@ En cada job, la pestaña **Summary** muestra el reporte visual endpoint por endp
 
 | Dónde | Versión A | Versión B |
 |---|---|---|
-| Repo del equipo [`perf-gate-demo`](https://github.com/LeoR22/perf-gate-demo) (usa `@v1` = v1.6.0) | [❌ gate en rojo, despliegue bloqueado](https://github.com/LeoR22/perf-gate-demo/actions/runs/42729780645/job/129544585059) | [✅ gate en verde, despliegue ejecutado](https://github.com/LeoR22/perf-gate-demo/actions/runs/42729780645/job/129544585407) |
-| Build y contrato de la herramienta | [✅ CI + integración del consumidor](https://github.com/LeoR22/perf-quality-gate/actions/runs/42728585540) | [✅ Release v1.6.0](https://github.com/LeoR22/perf-quality-gate/releases/tag/v1.6.0) · [✅ promoción de v1](https://github.com/LeoR22/perf-quality-gate/actions/runs/42728987324) |
+| Repo del equipo [`perf-gate-demo`](https://github.com/LeoR22/perf-gate-demo) (usa `@v1` = v1.7.0) | [❌ gate en rojo, despliegue bloqueado](https://github.com/LeoR22/perf-gate-demo/actions/runs/42861993615/job/129990370653) | [✅ gate en verde, despliegue ejecutado](https://github.com/LeoR22/perf-gate-demo/actions/runs/42861993615/job/129990369767) |
+| Build y contrato de la herramienta | [✅ CI + integración del consumidor](https://github.com/LeoR22/perf-quality-gate/actions/runs/42860459948) | [✅ Release v1.7.0](https://github.com/LeoR22/perf-quality-gate/releases/tag/v1.7.0) · [✅ promoción de v1](https://github.com/LeoR22/perf-quality-gate/actions/runs/42861245024) |
 
 ---
 

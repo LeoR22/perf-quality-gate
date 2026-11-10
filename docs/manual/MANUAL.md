@@ -123,6 +123,16 @@ Si abres el job **version-a**:
 
 En el job **version-b**, los dos pasos salen en verde y el despliegue se ejecuta.
 
+**También se probó con otros archivos.** Además de A y B, `resultados/` tiene cuatro escenarios **sintéticos**
+(generados desde producción con `scripts/generar_escenarios.py`), y el pipeline los evalúa todos:
+
+| Versión | Resultado | Qué demuestra |
+|---|---|---|
+| `version-c` | ✅ pasa | 10 % más rápida y sin errores: mejor que producción en todo |
+| `version-d` | ❌ no pasa | Latencia x2, 5 % de errores, −30 % de throughput y arranque lento: activa todas las reglas |
+| `sintetica-pasa` | ✅ pasa | +5 % de latencia queda dentro de la tolerancia |
+| `sintetica-falla` | ❌ no pasa | Falla en otros endpoints (`GET /clientes`, `Consultar saldo`) y por otras reglas que A |
+
 
 ### Evaluar una versión nueva en el pipeline
 
