@@ -43,18 +43,6 @@ inputs:
     description: "Token para gestionar los issues"
     required: false
     default: ${{ github.token }}
-  ai-summary:
-    description: "Si es 'true' y hay groq-api-key, agrega un resumen y plan de mejora redactado con IA (no cambia el veredicto)"
-    required: false
-    default: "false"
-  groq-api-key:
-    description: "API key gratuita de Groq (usar un secret). Sin ella, el resumen con IA se omite"
-    required: false
-    default: ""
-  ai-model:
-    description: "Modelos de Groq separados por coma, en orden de preferencia (vacío = openai/gpt-oss-120b, openai/gpt-oss-20b)"
-    required: false
-    default: ""
 
 outputs:
   result:
@@ -101,19 +89,7 @@ runs:
         [ "$IN_FAIL_ON_WARNINGS" = "true" ] && args+=(--fail-on-warnings)
         python -m perf_gate "${args[@]}"
 
-    # ---- Opcional: la IA explica, NO decide. Corre aunque el gate falle y nunca rompe el pipeline.
-    - name: Resumen con IA
-      if: always() && inputs.ai-summary == 'true' && steps.gate.outputs.result != ''
-      shell: bash
-      env:
-        PYTHONPATH: ${{ github.action_path }}/src
-        PYTHONIOENCODING: utf-8
-        GROQ_API_KEY: ${{ inputs.groq-api-key }}
-        PERF_GATE_AI_MODEL: ${{ inputs.ai-model }}
-        IN_REPORT_DIR: ${{ inputs.report-dir }}
-      run: python -m perf_gate.ai_summary --report "$IN_REPORT_DIR/report.json" || true
-
-    # ---- Opcional: documentar el defecto en GitHub Issues (determinista, sin IA).
+    # ---- Opcional: documentar el defecto en GitHub Issues. Corre aunque el gate falle y nunca cambia su resultado.
     - name: Documentar defecto
       if: always() && inputs.create-issue == 'true' && steps.gate.outputs.result != ''
       shell: bash

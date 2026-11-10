@@ -187,7 +187,7 @@ def to_json(r: GateResult) -> str:
 
 
 def rows(r: GateResult) -> list[dict]:
-    """Una fila plana por endpoint: fácil de graficar en Grafana, Excel o cualquier BI."""
+    """Una fila plana por endpoint: fácil de graficar en Excel o cualquier herramienta de BI."""
     out = []
     for e in r.endpoints:
         b, c, p = e.baseline, e.candidate, e.percentile

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Documenta el defecto en GitHub Issues según el veredicto del gate (sin IA, determinista):
+# Documenta el defecto en GitHub Issues según el veredicto del gate (determinista):
 #   FAIL       -> abre un issue "[perf-gate] <versión> no pasa", o comenta el existente
 #   PASS/WARN  -> si había un issue abierto para esa versión, lo cierra con el enlace a la ejecución
 # Variables: GH_TOKEN, RESULT, NAME, REPORT_DIR, GITHUB_REPOSITORY, GITHUB_SERVER_URL, GITHUB_RUN_ID
@@ -29,10 +29,6 @@ body=$(mktemp)
   echo "**Ejecución:** ${RUN_URL}"
   echo
   [ -f "${REPORT_DIR}/report.md" ] && cat "${REPORT_DIR}/report.md"
-  if [ -f "${REPORT_DIR}/ai-summary.md" ]; then
-    echo
-    cat "${REPORT_DIR}/ai-summary.md"
-  fi
   echo
   echo "---"
   echo "_Issue gestionado por [Performance Quality Gate](https://github.com/LeoR22/perf-quality-gate): se cierra solo cuando la versión pase._"

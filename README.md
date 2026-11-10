@@ -114,9 +114,6 @@ jobs:
 | `upload-report` | no | `true` | Sube el reporte como artifact |
 | `create-issue` | no | `false` | Documenta el defecto en GitHub Issues (requiere `permissions: issues: write`) |
 | `github-token` | no | `github.token` | Token para gestionar los issues |
-| `ai-summary` | no | `false` | Agrega un resumen y un plan de mejora redactados con IA (Groq, plan gratuito) |
-| `groq-api-key` | no | | API key de Groq (como secret). Sin ella, el resumen se omite |
-| `ai-model` | no | `openai/gpt-oss-120b, openai/gpt-oss-20b` | Modelos de Groq en orden de preferencia |
 
 **Outputs:** `result` (`PASS`/`WARN`/`FAIL`), `passed` (`true`/`false`), `headline`, `report-json`, `name`.
 
@@ -154,21 +151,13 @@ Los cuatro casos están cubiertos por tests (`test_exit_code_contract`, `test_in
   publicar en GitHub Pages (ver [perf-gate-demo](https://github.com/LeoR22/perf-gate-demo)).
 - `report.json` y `report.md` como artifact. El JSON incluye `rows`: una fila plana por endpoint
   (versión, endpoint, estado, ms de producción y de la versión nueva, cambio, errores, motivo), lista
-  para graficar en **Grafana**, Excel o cualquier herramienta de BI.
+  para graficar en Excel o cualquier herramienta de BI.
 
-### Defectos e IA: ayudan, no deciden
+### Defecto automático (opcional)
 
-El veredicto siempre lo toma el gate con reglas deterministas y reproducibles. Lo demás es opcional,
-corre aunque el gate falle y **nunca cambia su resultado ni rompe el pipeline**:
-
-| Capacidad | Qué hace | Por qué así |
-|---|---|---|
-| **Defecto automático** (`create-issue`) | Si no pasa, abre el issue `[perf-gate] <versión> no pasa` con el reporte y el link a la ejecución; en las siguientes ejecuciones lo comenta, y lo **cierra solo** cuando la versión pasa | Documenta el defecto en el sistema de tracking sin trabajo manual y sin duplicados. No usa IA |
-| **Resumen con IA** (`ai-summary`) | Un LLM de [Groq](https://console.groq.com) (plan gratuito) redacta una explicación y un plan de mejora priorizado, en el resumen de la ejecución y en el issue | Solo recibe el reporte **agregado** (sin peticiones individuales ni datos de clientes). Si falta la key o la API falla, se omite con un aviso |
-
-**Por qué la IA no decide:** un quality gate tiene que ser reproducible y auditable. Un LLM puede responder
-distinto con los mismos datos, depende de un servicio externo y en banca enviarle datos de producción es un
-tema de gobierno de datos. Por eso decide la regla y la IA solo explica.
+Con `create-issue: "true"`, cuando una versión no pasa el gate abre el issue `[perf-gate] <versión> no pasa`
+con el reporte y el link a la ejecución. En las siguientes ejecuciones lo comenta, sin duplicarlo, y lo
+**cierra solo** cuando la versión pasa. Corre aunque el gate falle y nunca cambia su resultado.
 
 ```yaml
 permissions:
@@ -180,9 +169,13 @@ steps:
       baseline: resultados/produccion.csv
       candidate: resultados/version-nueva.csv
       create-issue: "true"
-      ai-summary: "true"
-      groq-api-key: ${{ secrets.GROQ_API_KEY }}
 ```
+
+**¿Por qué no hay IA?** Se evaluó y se descartó. Un quality gate tiene que ser determinista, reproducible y
+auditable: con los mismos datos, siempre la misma decisión y la misma explicación. Las recomendaciones
+("el tiempo al primer byte también subió, así que la demora está en el servidor") salen de reglas sobre los
+datos, no de un modelo. Además, en banca enviar datos de producción a un servicio externo es un tema de
+gobierno de datos.
 
 ### Uso local (sin GitHub)
 
@@ -300,7 +293,7 @@ Todo esto aparece en la sección **"Calidad de datos"** de cada reporte.
 
 ### Núcleo y extensiones
 
-El núcleo (el camino crítico) no depende de IA, Grafana ni Issues. Su única dependencia es PyYAML:
+El núcleo (el camino crítico) no depende de servicios externos. Su única dependencia es PyYAML:
 
 ```text
 CSV/JSON baseline + candidata + YAML
@@ -320,9 +313,7 @@ Las extensiones consumen el resultado **después** de la evaluación. Si fallan,
 | Extensión | Estado | Por defecto | Si falla o no está configurada |
 |---|---|---|---|
 | Lector k6 | Estable (validado con k6 2.2.0 real) | Se detecta por contenido | No afecta al caso JMeter |
-| Resumen con IA (Groq) | Opcional | **Desactivado** (`ai-summary: false`) | Aviso y se omite; exit del gate intacto |
 | Issues automáticos | Opcional | **Desactivado** (`create-issue: false`) | Aviso y se omite; exit del gate intacto |
-| Grafana (dashboard y demo Docker) | Opcional, en [perf-gate-demo](https://github.com/LeoR22/perf-gate-demo) | No forma parte de la action | No se usa para decidir ni para generar el reporte |
 
 ```
 src/perf_gate/
@@ -362,8 +353,8 @@ k6 run --out json=resultados.json script.js   # o --out csv=resultados.csv
 - **Validado con salida real de k6 2.2.0** ([fixtures](tests/fixtures)). En la prueba aparecieron dos
   detalles: k6 2.x copia `name` en el tag `url` y el CSV trae el tiempo en segundos (se avisa en el reporte).
 - El resumen agregado (`--summary-export`) se rechaza con un error claro: no trae peticiones individuales.
-- La demo completa con Docker (APIs, k6, gate y Grafana) está en
-  [perf-gate-demo](https://github.com/LeoR22/perf-gate-demo#demo-local-con-docker-k6--grafana).
+- La demo completa con Docker (APIs simuladas, k6 y gate) está en
+  [perf-gate-demo](https://github.com/LeoR22/perf-gate-demo#demo-local-con-docker-k6).
 
 También se instala como paquete: `pip install https://github.com/LeoR22/perf-quality-gate/archive/refs/tags/v1.zip`
 y queda el comando `perf-gate`.
