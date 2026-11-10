@@ -123,6 +123,18 @@ Si abres el job **version-a**:
 
 En el job **version-b**, los dos pasos salen en verde y el despliegue se ejecuta.
 
+
+### Evaluar una versión nueva en el pipeline
+
+No hay que tocar el workflow. **Cada archivo de `resultados/` del repo del equipo, salvo `produccion-actual.csv`,
+se evalúa automáticamente** contra producción, con su propio job, reporte e issue:
+
+1. En https://github.com/LeoR22/perf-gate-demo/tree/main/resultados → **Add file → Upload files**.
+2. Sube el archivo, por ejemplo `version-c.csv`, y haz clic en **Commit changes**.
+3. En **Actions** aparece la ejecución sola, con un job nuevo llamado `version-c`.
+
+Para evaluar solo una: **Actions → Performance Gate → Run workflow** y escribir el nombre sin extensión.
+
 ---
 
 ## 5. El reporte: por qué no pasa y qué mejorar
@@ -285,6 +297,24 @@ deactivate
 
 > ⚠️ En este equipo usa siempre `python -m perf_gate` y **no** `perf-gate`: Windows bloquea el `perf-gate.exe`
 > que crea pip (Control de aplicaciones). `python -m perf_gate` hace exactamente lo mismo.
+
+### Evaluar otro archivo
+
+Copia tu archivo a la carpeta y cámbialo en `--candidate`:
+```powershell
+python -m perf_gate --baseline examples/resultados/produccion-actual.csv --candidate mi-version.csv --config perf-gate.yml --name mi-version --report-dir reporte-mi-version
+start reporte-mi-versioneport.html
+```
+
+Se puede comparar cualquier archivo contra cualquier otro (`--baseline` es la referencia):
+
+| Qué quieres ver | `--baseline` | `--candidate` | Resultado esperado |
+|---|---|---|---|
+| Producción contra sí misma | `produccion-actual.csv` | `produccion-actual.csv` | ✅ PASA |
+| ¿B es mejor que A? | `version-a.csv` | `version-b.csv` | ✅ pagos −54 % |
+
+**Requisitos:** columnas `timeStamp`, `elapsed`, `label` y `success` (`true`/`false`); los `label` deben
+coincidir con los de producción. Un dato inválido detiene la evaluación indicando la línea y la columna.
 
 ---
 
