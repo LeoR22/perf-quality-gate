@@ -121,7 +121,7 @@ jobs:
 
 | Referencia | Qué recibe el equipo | Cuándo usarla |
 |---|---|---|
-| `@v1.5.0` | Exactamente esa release. **Las releases son inmutables**: el CI se niega a publicar dos veces el mismo tag | Pipelines que necesitan reproducibilidad |
+| `@v1.6.0` | Exactamente esa release. **Las releases son inmutables**: el CI se niega a publicar dos veces el mismo tag | Pipelines que necesitan reproducibilidad |
 | `@<sha del commit>` | Exactamente ese código, aunque alguien mueva un tag | Máxima reproducibilidad y seguridad de la cadena de suministro |
 | `@v1` | La última release `v1.x.y` **promovida** | Recibir correcciones compatibles sin tocar el pipeline |
 
